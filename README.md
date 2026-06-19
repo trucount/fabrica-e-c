@@ -88,6 +88,9 @@ On every publish run, the workflow:
 
 The workflow publishes `fabrica-e-commerce` as an unscoped public npm package. The package name must be available on npm, and your `NPM_TOKEN` account must have permission to publish it.
 
+
+For npm provenance publishing, `package.json` includes a `repository.url` that matches the GitHub repository used by the workflow. Keep that URL in sync if you move the repository, otherwise npm will reject the provenance bundle.
+
 ## Local project records
 
 Deployment metadata is saved to `~/.fabrica-ecommerce/projects.json`. Secret values are not stored; only the variable names, project path, repo URL, created date, and Supabase URL are saved.

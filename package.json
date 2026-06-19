@@ -31,5 +31,13 @@
   "license": "MIT",
   "engines": {
     "node": ">=18.17"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/trucount/fabrica-e-c"
+  },
+  "homepage": "https://github.com/trucount/fabrica-e-c#readme",
+  "bugs": {
+    "url": "https://github.com/trucount/fabrica-e-c/issues"
   }
 }
