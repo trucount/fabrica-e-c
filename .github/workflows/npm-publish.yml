@@ -1,0 +1,62 @@
+name: Verify and publish npm package
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - work
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: npm-publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: ${{ !contains(github.event.head_commit.message || '', '[skip npm-publish]') }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js for npm
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify syntax
+        run: npm run build
+
+      - name: Smoke test CLI
+        run: npm run test:cli
+
+      - name: Test packed CLI tarball
+        run: npm run test:pack
+
+      - name: Bump package version from npm latest
+        run: node ./scripts/bump-version-from-npm.js
+
+      - name: Show package version to publish
+        run: npm pkg get name version
+
+      - name: Publish to npm
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Commit published version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore: publish npm version $(node -p "require('./package.json').version") [skip npm-publish]"
+          git push
