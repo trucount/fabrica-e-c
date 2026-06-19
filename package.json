@@ -17,7 +17,8 @@
     "start": "node ./bin/fabrica.js",
     "build": "node ./scripts/check-syntax.js",
     "test:cli": "node ./bin/fabrica.js help && node ./bin/fabrica.js info",
-    "test:pack": "node ./scripts/test-packed-cli.js"
+    "test:pack": "node ./scripts/test-packed-cli.js",
+    "version:bump:npm": "node ./scripts/bump-version-from-npm.js"
   },
   "keywords": [
     "fabrica",

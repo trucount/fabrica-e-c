@@ -61,6 +61,33 @@ On Windows CMD, these commands do not require Unix tools such as `find` or `xarg
 5. Adds `SUPABASE_URL` and `SUPABASE_ANON_KEY` from the bridge response.
 6. Uses `npx vercel@latest link --yes --project <name>`, `vercel env add`, and `vercel --prod --yes` to deploy from the cloned repo.
 
+
+
+## Windows Vercel command note
+
+The CLI runs npm-launched commands through `npx.cmd` on Windows, so `npx vercel@latest ...` works from CMD and PowerShell instead of failing with `'vercel@latest' is not recognized`. If you still see Vercel login prompts, complete them in the browser and rerun the command.
+
+## Automatic npm publishing from GitHub
+
+The repository includes a GitHub Actions workflow at `.github/workflows/npm-publish.yml` that verifies the CLI and publishes it to npm on pushes to `main`, `master`, or `work`, and can also be started manually from the Actions tab.
+
+Before the workflow can publish, add an npm automation token to your GitHub repository secrets:
+
+1. Create an npm token with publish permissions from your npm account.
+2. In GitHub, open **Settings → Secrets and variables → Actions**.
+3. Add a repository secret named `NPM_TOKEN` with that npm token.
+
+On every publish run, the workflow:
+
+1. Runs `npm run build`.
+2. Runs `npm run test:cli`.
+3. Runs `npm run test:pack`.
+4. Checks the current latest version on npm and bumps `package.json` to the next patch version when needed.
+5. Runs `npm publish --access public --provenance`.
+6. Commits the published version back to GitHub with `[skip npm-publish]` to avoid an infinite publish loop.
+
+For scoped packages like `@fabrica/e-commerce`, `--access public` is required when publishing a public package to npm.
+
 ## Local project records
 
 Deployment metadata is saved to `~/.fabrica-ecommerce/projects.json`. Secret values are not stored; only the variable names, project path, repo URL, created date, and Supabase URL are saved.
