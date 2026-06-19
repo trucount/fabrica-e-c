@@ -7,14 +7,28 @@
     "fabrica": "./bin/fabrica.js",
     "fabrica-e-commerce": "./bin/fabrica.js"
   },
-  "files": ["bin", "src", "README.md"],
+  "files": [
+    "bin",
+    "src",
+    "scripts/check-syntax.js",
+    "README.md"
+  ],
   "scripts": {
     "start": "node ./bin/fabrica.js",
-    "build": "node --check ./bin/fabrica.js && find src -name '*.js' -print0 | xargs -0 -n1 node --check",
-    "test:cli": "node ./bin/fabrica.js help && node ./bin/fabrica.js info"
+    "build": "node ./scripts/check-syntax.js",
+    "test:cli": "node ./bin/fabrica.js help && node ./bin/fabrica.js info",
+    "test:pack": "node ./scripts/test-packed-cli.js"
   },
-  "keywords": ["fabrica", "ecommerce", "supabase", "vercel", "cli"],
+  "keywords": [
+    "fabrica",
+    "ecommerce",
+    "supabase",
+    "vercel",
+    "cli"
+  ],
   "author": "Fabrica",
   "license": "MIT",
-  "engines": { "node": ">=18.17" }
+  "engines": {
+    "node": ">=18.17"
+  }
 }

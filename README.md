@@ -16,6 +16,26 @@ npm install -g @fabrica/e-commerce
 fabrica build
 ```
 
+
+## Local NPX-style package test
+
+Before publishing, test the package exactly like a fresh command-line install:
+
+```bash
+npm run build
+npm pack --dry-run
+npm exec --yes --package . -- fabrica help
+npm exec --yes --package . -- fabrica info
+```
+
+You can also run the bundled pack test, which creates a real `.tgz` tarball and executes the installed binary from that tarball:
+
+```bash
+npm run test:pack
+```
+
+On Windows CMD, these commands do not require Unix tools such as `find` or `xargs`; the build script uses a Node.js checker instead.
+
 ## Commands
 
 - `build` — creates a Fabrica Connect Supabase job, opens the OAuth bridge, asks for required secrets, clones `https://github.com/trucount/fabrica-final-e-c.git`, links a Vercel project, writes production environment variables, and deploys with `vercel --prod`.
