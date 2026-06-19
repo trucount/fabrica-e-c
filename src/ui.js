@@ -27,8 +27,8 @@ ${orange('Commands')}
   ${bold('help')}       Show this help screen
 
 ${orange('Examples')}
-  npx @fabrica/e-commerce build
-  npx @fabrica/e-commerce list
-  npx @fabrica/e-commerce info
+  npx fabrica-e-commerce build
+  npx fabrica-e-commerce list
+  npx fabrica-e-commerce info
 `);
 }

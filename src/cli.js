@@ -47,7 +47,7 @@ async function list() {
 
 async function info() {
   banner();
-  kv('Package', `@fabrica/e-commerce v${await packageVersion()}`);
+  kv('Package', `fabrica-e-commerce v${await packageVersion()}`);
   kv('Bridge', BRIDGE_ORIGIN);
   kv('Store repo', STORE_REPO);
   kv('Local data', dataDir);

@@ -1,18 +1,18 @@
-# @fabrica/e-commerce
+# fabrica-e-commerce
 
 Orange themed NPX CLI for launching a Fabrica e-commerce storefront from CMD or any terminal.
 
 ## Install / run
 
 ```bash
-npx @fabrica/e-commerce help
-npx @fabrica/e-commerce build
+npx fabrica-e-commerce help
+npx fabrica-e-commerce build
 ```
 
 The package exposes both `fabrica` and `fabrica-e-commerce` binaries after global install.
 
 ```bash
-npm install -g @fabrica/e-commerce
+npm install -g fabrica-e-commerce
 fabrica build
 ```
 
@@ -86,7 +86,7 @@ On every publish run, the workflow:
 5. Runs `npm publish --access public --provenance`.
 6. Commits the published version back to GitHub with `[skip npm-publish]` to avoid an infinite publish loop.
 
-For scoped packages like `@fabrica/e-commerce`, `--access public` is required when publishing a public package to npm.
+The workflow publishes `fabrica-e-commerce` as an unscoped public npm package. The package name must be available on npm, and your `NPM_TOKEN` account must have permission to publish it.
 
 ## Local project records
 
