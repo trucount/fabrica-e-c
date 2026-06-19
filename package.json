@@ -1,0 +1,43 @@
+{
+  "name": "fabrica-e-commerce",
+  "version": "0.1.0",
+  "description": "Orange themed CMD launcher for deploying Fabrica e-commerce stores with Supabase and Vercel.",
+  "type": "module",
+  "bin": {
+    "fabrica": "bin/fabrica.js",
+    "fabrica-e-commerce": "bin/fabrica.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "scripts/check-syntax.js",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node ./bin/fabrica.js",
+    "build": "node ./scripts/check-syntax.js",
+    "test:cli": "node ./bin/fabrica.js help && node ./bin/fabrica.js info",
+    "test:pack": "node ./scripts/test-packed-cli.js",
+    "version:bump:npm": "node ./scripts/bump-version-from-npm.js"
+  },
+  "keywords": [
+    "fabrica",
+    "ecommerce",
+    "supabase",
+    "vercel",
+    "cli"
+  ],
+  "author": "Fabrica",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.17"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/trucount/fabrica-e-c"
+  },
+  "homepage": "https://github.com/trucount/fabrica-e-c#readme",
+  "bugs": {
+    "url": "https://github.com/trucount/fabrica-e-c/issues"
+  }
+}
