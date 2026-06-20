@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import process from 'node:process';
 import { commandExists, runCommand, runCommandCapture } from './system.js';
 import { kv, section, spinner } from './ui.js';
@@ -23,14 +25,14 @@ const DEPENDENCIES = [
   {
     name: 'git',
     label: 'Git',
-    check: () => commandExists('git'),
+    check: () => checkWithPathRefresh('git'),
     install: installGit,
     manualUrl: 'https://git-scm.com/downloads'
   },
   {
     name: 'gh',
     label: 'GitHub CLI (gh)',
-    check: () => commandExists('gh'),
+    check: () => checkWithPathRefresh('gh'),
     install: installGithubCli,
     manualUrl: 'https://github.com/cli/cli#installation'
   },
@@ -43,18 +45,69 @@ const DEPENDENCIES = [
   }
 ];
 
+
+function addToPathIfDirectory(directory) {
+  if (!directory || !fs.existsSync(directory)) return;
+  const delimiter = path.delimiter;
+  const current = process.env.PATH || '';
+  const entries = current.split(delimiter).filter(Boolean);
+  if (!entries.some((entry) => entry.toLowerCase() === directory.toLowerCase())) {
+    process.env.PATH = `${directory}${delimiter}${current}`;
+  }
+}
+
+function refreshWindowsToolPaths() {
+  if (process.platform !== 'win32') return;
+  const localAppData = process.env.LOCALAPPDATA;
+  const programFiles = process.env.ProgramFiles;
+  const programFilesX86 = process.env['ProgramFiles(x86)'];
+  const programData = process.env.ProgramData;
+  addToPathIfDirectory(localAppData && path.join(localAppData, 'Microsoft', 'WinGet', 'Links'));
+  addToPathIfDirectory(programFiles && path.join(programFiles, 'GitHub CLI'));
+  addToPathIfDirectory(programFilesX86 && path.join(programFilesX86, 'GitHub CLI'));
+  addToPathIfDirectory(programData && path.join(programData, 'chocolatey', 'bin'));
+  addToPathIfDirectory(programFiles && path.join(programFiles, 'Git', 'cmd'));
+  addToPathIfDirectory(programFiles && path.join(programFiles, 'nodejs'));
+}
+
+async function checkWithPathRefresh(command) {
+  refreshWindowsToolPaths();
+  return commandExists(command);
+}
+
+async function runFirstSuccessful(candidates, options = {}) {
+  for (const [command, args] of candidates) {
+    const result = await runCommandCapture(command, args, options);
+    if (result.code === 0) return result;
+  }
+  return { code: 1, stdout: '', stderr: 'All fallback commands failed' };
+}
+
 async function checkVercelCli() {
-  const result = await runCommandCapture('npx', ['--yes', 'vercel@latest', '--version']);
+  refreshWindowsToolPaths();
+  const result = await runFirstSuccessful([
+    ['npx', ['--yes', 'vercel@latest', '--version']],
+    ['npm', ['exec', '--yes', 'vercel@latest', '--', '--version']],
+    ['vercel', ['--version']]
+  ]);
   return result.code === 0;
 }
 
 async function warmVercelCli() {
-  // npx fetches vercel on first use, so "installing" it just means priming
-  // the npm cache once so later `build`/`list` calls are instant.
-  await runCommand('npx', ['--yes', 'vercel@latest', '--version'], { allowFailure: true });
+  refreshWindowsToolPaths();
+  const warmed = await runFirstSuccessful([
+    ['npx', ['--yes', 'vercel@latest', '--version']],
+    ['npm', ['exec', '--yes', 'vercel@latest', '--', '--version']],
+    ['vercel', ['--version']]
+  ]);
+  if (warmed.code === 0) return;
+  // Last resort: install a global Vercel binary so future invocations have a
+  // real `vercel` executable even when npx/npm exec cannot launch correctly.
+  await runCommand('npm', ['install', '-g', 'vercel@latest'], { allowFailure: true });
 }
 
 async function installGit() {
+  refreshWindowsToolPaths();
   const platform = process.platform;
   if (platform === 'linux') {
     if (await commandExists('apt-get')) {
@@ -70,12 +123,21 @@ async function installGit() {
     if (await commandExists('brew')) return runCommand('brew', ['install', 'git'], { allowFailure: true });
   }
   if (platform === 'win32') {
-    if (await commandExists('winget')) return runCommand('winget', ['install', '--id', 'Git.Git', '-e', '--source', 'winget'], { allowFailure: true });
-    if (await commandExists('choco')) return runCommand('choco', ['install', 'git', '-y'], { allowFailure: true });
+    if (await commandExists('winget')) {
+      await runCommand('winget', ['install', '--id', 'Git.Git', '-e', '--source', 'winget'], { allowFailure: true });
+      refreshWindowsToolPaths();
+      return;
+    }
+    if (await commandExists('choco')) {
+      await runCommand('choco', ['install', 'git', '-y'], { allowFailure: true });
+      refreshWindowsToolPaths();
+      return;
+    }
   }
 }
 
 async function installGithubCli() {
+  refreshWindowsToolPaths();
   const platform = process.platform;
   if (platform === 'linux') {
     if (await commandExists('apt-get')) {
@@ -107,8 +169,16 @@ async function installGithubCli() {
     if (await commandExists('brew')) return runCommand('brew', ['install', 'gh'], { allowFailure: true });
   }
   if (platform === 'win32') {
-    if (await commandExists('winget')) return runCommand('winget', ['install', '--id', 'GitHub.cli', '-e', '--source', 'winget'], { allowFailure: true });
-    if (await commandExists('choco')) return runCommand('choco', ['install', 'gh', '-y'], { allowFailure: true });
+    if (await commandExists('winget')) {
+      await runCommand('winget', ['install', '--id', 'GitHub.cli', '-e', '--source', 'winget'], { allowFailure: true });
+      refreshWindowsToolPaths();
+      return;
+    }
+    if (await commandExists('choco')) {
+      await runCommand('choco', ['install', 'gh', '-y'], { allowFailure: true });
+      refreshWindowsToolPaths();
+      return;
+    }
   }
 }
 

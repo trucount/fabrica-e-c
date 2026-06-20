@@ -7,13 +7,22 @@ function executable(command) {
   return command;
 }
 
+function spawnOptions(options = {}, stdio) {
+  return {
+    stdio,
+    // Windows package-manager shims such as npm.cmd/npx.cmd can throw
+    // `spawn EINVAL` when launched directly from some terminals. Running
+    // through the platform shell preserves Unix behavior while making those
+    // Windows shim commands reliable.
+    shell: process.platform === 'win32',
+    cwd: options.cwd,
+    env: options.env || process.env
+  };
+}
+
 export function runCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable(command), args, {
-      stdio: options.input ? ['pipe', 'inherit', 'inherit'] : 'inherit',
-      shell: false,
-      cwd: options.cwd
-    });
+    const child = spawn(executable(command), args, spawnOptions(options, options.input ? ['pipe', 'inherit', 'inherit'] : 'inherit'));
     if (options.input) child.stdin.end(options.input);
     child.on('error', (error) => {
       if (options.allowFailure) resolve();
@@ -31,11 +40,7 @@ export function runCommandCapture(command, args, options = {}) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(executable(command), args, {
-        stdio: 'pipe',
-        shell: false,
-        cwd: options.cwd
-      });
+      child = spawn(executable(command), args, spawnOptions(options, 'pipe'));
     } catch (error) {
       resolve({ code: null, stdout: '', stderr: '', error });
       return;
