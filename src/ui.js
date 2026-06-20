@@ -16,7 +16,17 @@ export function banner() {
 }
 export function section(title) { console.log('\n' + orange(`◆ ${title}`)); }
 export function kv(key, value) { console.log(`${dimOrange('>')} ${bold(key)} ${dimOrange('→')} ${value}`); }
-export function spinner(text) { process.stdout.write(dimOrange('> ') + text); return { succeed(msg) { process.stdout.write(`\r${orange('✓')} ${msg}\n`); }, fail(msg) { process.stdout.write(`\r${orange('✗')} ${msg}\n`); } }; }
+// Clear the rest of the line (\x1b[K) before writing the final message so a
+// shorter success/fail message never leaves leftover characters from the
+// longer spinner text trailing after it (e.g. "✓ Git foundGit").
+const CLEAR_LINE = '\x1b[K';
+export function spinner(text) {
+  process.stdout.write(dimOrange('> ') + text);
+  return {
+    succeed(msg) { process.stdout.write(`\r${CLEAR_LINE}${orange('✓')} ${msg}\n`); },
+    fail(msg) { process.stdout.write(`\r${CLEAR_LINE}${orange('✗')} ${msg}\n`); }
+  };
+}
 export function help() {
   banner();
   console.log(`
