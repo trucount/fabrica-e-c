@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { HARDCODED_ENV, REQUIRED_ENV_KEYS, STORE_REPO } from './config.js';
 import { buildsDir, saveProject } from './store.js';
 import { runCommand, runCommandCapture } from './system.js';
-import { kv, section, spinner } from './ui.js';
+import { dimOrange, kv, section, spinner } from './ui.js';
 import { ask, choose } from './prompt.js';
 
 const VERCEL_ENVIRONMENTS = ['production', 'preview', 'development'];
@@ -60,6 +60,32 @@ async function setEnvEverywhere(project, env) {
   }
 }
 
+// Vercel's GitHub App integration indexes newly created/forked repos on its
+// own delay, separate from GitHub itself being aware of the repo. Right after
+// a fork, `vercel git connect` can fail simply because Vercel hasn't synced
+// yet — not because anything is actually wrong. Retry with backoff before
+// giving up, then fall back to a direct deploy with clear next steps.
+async function connectGithubRepo(project, repoUrl) {
+  const spin = spinner(`Connecting Vercel project to ${repoUrl}`);
+  const attempts = 6;
+  let lastError = '';
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const connect = await runCommandCapture('npx', ['--yes', 'vercel@latest', 'git', 'connect', repoUrl, '--yes'], { cwd: project.target });
+    if (connect.code === 0) {
+      spin.succeed('Vercel project connected to GitHub repo (future pushes auto-deploy)');
+      return true;
+    }
+    lastError = (connect.stderr || connect.stdout || '').trim();
+    if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, attempt * 3000));
+  }
+  spin.fail('Could not auto-connect Git — continuing with a direct deploy');
+  console.log(dimOrange('  This usually means one of two things:'));
+  console.log(dimOrange(`  1) Vercel hasn't finished indexing the new fork yet (run "fabrica list" in a minute and re-link manually with: npx vercel git connect ${repoUrl})`));
+  console.log(dimOrange('  2) The "Vercel" GitHub App is set to "Only select repositories" and was never granted access to the new fork — fix at https://github.com/settings/installations'));
+  if (lastError) console.log(dimOrange(`  Last error: ${lastError}`));
+  return false;
+}
+
 export async function deployToVercel(project, env, githubRepo) {
   section('Vercel deployment');
   await ensureVercelLogin();
@@ -67,10 +93,7 @@ export async function deployToVercel(project, env, githubRepo) {
   await runCommand('npx', ['vercel@latest', 'link', '--yes', '--project', project.projectName], { cwd: project.target });
 
   if (githubRepo?.repoUrl) {
-    const spin = spinner(`Connecting Vercel project to ${githubRepo.repoUrl}`);
-    const connect = await runCommandCapture('npx', ['--yes', 'vercel@latest', 'git', 'connect', githubRepo.repoUrl, '--yes'], { cwd: project.target });
-    if (connect.code === 0) spin.succeed('Vercel project connected to GitHub repo (future pushes auto-deploy)');
-    else spin.fail('Could not auto-connect Git — continuing with a direct deploy');
+    await connectGithubRepo(project, githubRepo.repoUrl);
   }
 
   await setEnvEverywhere(project, env);
