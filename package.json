@@ -1,6 +1,6 @@
 {
   "name": "fabrica-e-commerce",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "CLI launcher for deploying Fabrica e-commerce stores — Supabase + Vercel, works on Windows, macOS, Linux & Termux.",
   "type": "module",
   "bin": {
