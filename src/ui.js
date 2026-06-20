@@ -1,79 +1,120 @@
 import process from 'node:process';
 import boxen from 'boxen';
 
-// ── color helpers (raw ANSI, no deps) ────────────────────────────────────────
+// ── colors ────────────────────────────────────────────────────────────────────
 const ESC = '\x1b[';
-export const orange  = (t) => `${ESC}38;2;255;138;0m${t}${ESC}0m`;
+export const orange    = (t) => `${ESC}38;2;255;138;0m${t}${ESC}0m`;
 export const dimOrange = (t) => `${ESC}38;2;182;95;0m${t}${ESC}0m`;
-export const bold    = (t) => `${ESC}1m${t}${ESC}0m`;
-export const red     = (t) => `${ESC}38;2;220;50;50m${t}${ESC}0m`;
-export const dim     = (t) => `${ESC}2m${t}${ESC}0m`;
-export const green   = (t) => `${ESC}38;2;80;200;80m${t}${ESC}0m`;
+export const bold      = (t) => `${ESC}1m${t}${ESC}0m`;
+export const red       = (t) => `${ESC}38;2;220;50;50m${t}${ESC}0m`;
+export const dim       = (t) => `${ESC}2m${t}${ESC}0m`;
+export const green     = (t) => `${ESC}38;2;80;200;80m${t}${ESC}0m`;
 
-// ── boxen presets ─────────────────────────────────────────────────────────────
-// Main section box — rounded corners, orange border
-function sectionBox(content, title) {
-  return boxen(content, {
-    title: title ? bold(orange(title)) : undefined,
+// strip ANSI for length calculations
+function stripAnsi(s) { return s.replace(/\x1b\[[0-9;]*m/g, ''); }
+
+// ── section buffer ─────────────────────────────────────────────────────────────
+// Each section accumulates lines, then flushes as ONE boxen box when the
+// next section (or flushSection) is called.
+let _currentTitle = null;
+let _lines = [];          // raw strings (may contain ANSI)
+let _sectionCount = 0;
+let _isError = false;
+
+function flushSection() {
+  if (_currentTitle === null) return;
+
+  const content = _lines.join('\n');
+  const rendered = boxen(content || ' ', {
+    title: bold(orange(_currentTitle)),
     titleAlignment: 'left',
     padding: { top: 0, bottom: 0, left: 1, right: 1 },
     margin: { top: 0, bottom: 0, left: 0, right: 0 },
     borderStyle: 'round',
     borderColor: '#ff8a00',
   });
+
+  if (_sectionCount > 1) console.log(orange('  │'));
+  console.log(rendered);
+
+  _currentTitle = null;
+  _lines = [];
+  _isError = false;
 }
 
-// Sub-step box — single border, indented, dim orange or red
-function subStepBox(content, isError = false) {
-  return boxen(content, {
+// Add a line into the current section buffer
+function addLine(text) {
+  _lines.push(text);
+}
+
+export function resetSectionCount() {
+  flushSection();
+  _sectionCount = 0;
+}
+
+// ── public API ────────────────────────────────────────────────────────────────
+
+// Start a new named section (flushes previous one)
+export function section(title) {
+  flushSection();
+  _sectionCount++;
+  _currentTitle = title;
+  _lines = [];
+}
+
+// Force-flush the current section (call at end of a command)
+export function endSections() {
+  flushSection();
+}
+
+// kv row inside current section
+export function kv(key, value) {
+  addLine(`  ${dimOrange('›')} ${bold(key)} ${dimOrange('→')} ${value}`);
+}
+
+// spinner — writes inline to stdout while running, then adds result line to buffer
+const CLEAR_LINE = '\x1b[K';
+export function spinner(text) {
+  process.stdout.write(`  ${dimOrange('○')} ${text}`);
+  return {
+    succeed(msg) {
+      process.stdout.write(`\r${CLEAR_LINE}`);
+      addLine(`  ${orange('✓')} ${msg}`);
+    },
+    fail(msg) {
+      process.stdout.write(`\r${CLEAR_LINE}`);
+      addLine(`  ${red('✗')} ${msg}`);
+    },
+  };
+}
+
+// plain log inside current section
+export function log(text) {
+  addLine(`  ${text}`);
+}
+
+// sub-step block (e.g. raw Vercel output) — indented, dimmer border
+export function subBox(lines, { isError = false } = {}) {
+  if (!lines || !lines.length) return;
+  const colored = isError ? lines.map((l) => red(l)) : lines.map((l) => dimOrange(l));
+  const content = colored.join('\n');
+  const rendered = boxen(content, {
     padding: { top: 0, bottom: 0, left: 1, right: 1 },
-    margin: { top: 0, bottom: 0, left: 4, right: 0 },
+    margin: { top: 0, bottom: 0, left: 2, right: 0 },
     borderStyle: 'single',
     borderColor: isError ? '#dc3232' : '#b65f00',
   });
-}
-
-// ── section tracking (connector │ lines between boxes) ───────────────────────
-let _sectionCount = 0;
-export function resetSectionCount() { _sectionCount = 0; }
-
-export function section(title) {
-  if (_sectionCount > 0) console.log(orange('  │'));
-  _sectionCount++;
-  console.log(sectionBox('', title));
-}
-
-// Print content in a section-style box (with optional title)
-export function box(lines, title) {
-  const content = lines.join('\n');
-  console.log(sectionBox(content, title));
-}
-
-// Print a sub-step box (indented, for raw tool output)
-export function subBox(lines, { isError = false } = {}) {
-  if (!lines || !lines.length) return;
-  const content = (isError ? lines.map((l) => red(l)) : lines.map((l) => dimOrange(l))).join('\n');
-  console.log(subStepBox(content, isError));
-}
-
-// kv inside current flow
-export function kv(key, value) {
-  console.log(`  ${dimOrange('›')} ${bold(key)} ${dimOrange('→')} ${value}`);
-}
-
-// ── spinner ───────────────────────────────────────────────────────────────────
-const CLEAR_LINE = '\x1b[K';
-export function spinner(text) {
-  process.stdout.write('  ' + dimOrange('○ ') + text);
-  return {
-    succeed(msg) { process.stdout.write(`\r${CLEAR_LINE}  ${orange('✓')} ${msg}\n`); },
-    fail(msg)    { process.stdout.write(`\r${CLEAR_LINE}  ${red('✗')} ${msg}\n`); },
-  };
+  // add each rendered line into buffer so it stays inside the section box
+  for (const line of rendered.split('\n')) addLine(line);
 }
 
 // ── banner ────────────────────────────────────────────────────────────────────
 export function banner() {
+  flushSection();
   _sectionCount = 0;
+  _currentTitle = null;
+  _lines = [];
+
   const art = [
     '███████╗ █████╗ ██████╗ ██████╗ ██╗ ██████╗ █████╗ ',
     '██╔════╝██╔══██╗██╔══██╗██╔══██╗██║██╔════╝██╔══██╗',
@@ -90,7 +131,6 @@ export function banner() {
 
   console.log(boxen(`${art}\n\n${subtitle}`, {
     padding: { top: 0, bottom: 0, left: 1, right: 1 },
-    margin: { top: 0, bottom: 0, left: 0, right: 0 },
     borderStyle: 'double',
     borderColor: '#ff8a00',
   }));
@@ -119,7 +159,12 @@ export function help() {
     '',
     dim('Creator: SPARROW AI SOLUTION'),
   ].join('\n');
-
   console.log(orange('  │'));
-  console.log(sectionBox(content, 'Help'));
+  console.log(boxen(content, {
+    title: bold(orange('Help')),
+    titleAlignment: 'left',
+    padding: { top: 0, bottom: 0, left: 1, right: 1 },
+    borderStyle: 'round',
+    borderColor: '#ff8a00',
+  }));
 }
