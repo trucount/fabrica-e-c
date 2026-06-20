@@ -147,18 +147,18 @@ export function help() {
   banner();
 
   const commands = [
-    { cmd: 'build',  desc: 'Connect Supabase · collect secrets · deploy or run locally',   icon: '🚀' },
-    { cmd: 'list',   desc: 'Show all Fabrica projects (local & cloud)',                     icon: '📋' },
-    { cmd: 'env',    desc: 'View and update environment variables for any project',         icon: '⚙️ ' },
-    { cmd: 'rerun',  desc: 'Re-run or re-open an existing project',                         icon: '▶️ ' },
-    { cmd: 'vins',   desc: 'Verify & auto-install CLI deps (git, gh, vercel)',              icon: '🔧' },
-    { cmd: 'clean',  desc: 'Clean data, env files, or logout from Vercel / GitHub',        icon: '🧹' },
-    { cmd: 'info',   desc: 'Package, bridge, repo and storage info',                       icon: 'ℹ️ ' },
-    { cmd: 'help',   desc: 'Show this help screen',                                        icon: '❓' },
+    { cmd: 'build',  desc: 'Connect Supabase · collect secrets · deploy or run locally' },
+    { cmd: 'list',   desc: 'Show all Fabrica projects (local & cloud)'                  },
+    { cmd: 'env',    desc: 'View and update environment variables for any project'      },
+    { cmd: 'rerun',  desc: 'Re-run or re-open an existing project'                      },
+    { cmd: 'vins',   desc: 'Verify & auto-install CLI deps (git, gh, vercel)'           },
+    { cmd: 'clean',  desc: 'Clean data, env files, or logout from Vercel / GitHub'      },
+    { cmd: 'info',   desc: 'Package, bridge, repo and storage info'                     },
+    { cmd: 'help',   desc: 'Show this help screen'                                      },
   ];
 
-  const cmdRows = commands.map(({ cmd, desc, icon }) =>
-    `   ${icon}  ${bold(orange(cmd.padEnd(10)))}  ${dim(desc)}`
+  const cmdRows = commands.map(({ cmd, desc }) =>
+    `   ${dimOrange(figures.pointer)} ${bold(orange(cmd.padEnd(10)))}  ${dim(desc)}`
   ).join('\n');
 
   const examples = [
