@@ -1,7 +1,7 @@
 import { BRIDGE_API_KEY, BRIDGE_ORIGIN, POLL_INTERVAL_MS, POLL_TIMEOUT_MS } from './config.js';
 import { FULL_SQL } from './sql.js';
 import { openUrl } from './system.js';
-import { spinner } from './ui.js';
+import { spinner, log } from './ui.js';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 export async function connectSupabase() {
   const spin = spinner('Posting secure schema job to Fabrica Connect');
@@ -9,7 +9,7 @@ export async function connectSupabase() {
   if (!response.ok) throw new Error(`Bridge rejected job: ${response.status} ${await response.text()}`);
   const job = await response.json();
   spin.succeed('Bridge job created');
-  console.log(`Open this URL if your browser does not start: ${job.connectUrl}`);
+  log(`Open this URL if your browser does not start: ${job.connectUrl}`);
   await openUrl(job.connectUrl);
   const started = Date.now();
   const poll = spinner('Waiting for Supabase authorization and project selection');
