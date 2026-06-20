@@ -1,3 +1,4 @@
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { HARDCODED_ENV, REQUIRED_ENV_KEYS, STORE_REPO } from './config.js';
@@ -102,4 +103,25 @@ export async function editProjectEnv(projects) {
   }
   await runCommand('npx', ['vercel@latest', '--prod', '--yes'], { cwd: project.target });
   kv('Redeployed', project.projectName);
+}
+
+
+export async function runLocally(project, env) {
+  section('Local Next.js setup');
+  const envPath = path.join(project.target, '.env.local');
+  const contents = Object.entries(env).map(([key, value]) => `${key}=${String(value).replace(/\n/g, '\\n')}`).join('\n') + '\n';
+  await fs.writeFile(envPath, contents, 'utf8');
+  kv('Env file', envPath);
+
+  const hasPnpmLock = await fs.access(path.join(project.target, 'pnpm-lock.yaml')).then(() => true, () => false);
+  const pnpmAvailable = (await runCommandCapture('pnpm', ['--version'])).code === 0;
+  const installCommand = hasPnpmLock && pnpmAvailable ? ['pnpm', ['install']] : ['npm', ['install']];
+  const devCommand = hasPnpmLock && pnpmAvailable ? ['pnpm', ['run', 'dev']] : ['npm', ['run', 'dev']];
+
+  await runCommand(installCommand[0], installCommand[1], { cwd: project.target });
+  section('Local app');
+  kv('Path', project.target);
+  kv('URL', 'http://localhost:3000');
+  console.log('Starting the Next.js dev server. Press Ctrl+C to stop it.');
+  await runCommand(devCommand[0], devCommand[1], { cwd: project.target });
 }

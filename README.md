@@ -38,7 +38,7 @@ On Windows CMD, these commands do not require Unix tools such as `find` or `xarg
 
 ## Commands
 
-- `build` — checks dependencies (git, GitHub CLI, Vercel CLI), creates a Fabrica Connect Supabase job, opens the OAuth bridge, asks for required secrets, clones `https://github.com/trucount/fabrica-final-e-c.git`, verifies/logs in to Vercel (`vercel login`), publishes that code to a **new GitHub repository** under your account, connects the Vercel project to that repo for continuous deployment, writes every environment variable to production/preview/development, and deploys with `vercel --prod`.
+- `build` — checks Git, creates a Fabrica Connect Supabase job, opens the OAuth bridge, asks for required secrets, clones `https://github.com/trucount/fabrica-final-e-c.git`, then asks whether to run locally or deploy on Vercel. Local mode writes `.env.local`, installs dependencies, and starts the Next.js dev server. Vercel mode checks GitHub/Vercel dependencies, verifies/logs in to Vercel, creates a user-owned repo from the hardcoded storefront source (fork/template, not `git push`), connects Vercel to that repo, writes every environment variable to production/preview/development, and deploys with `vercel --prod`.
 - `list` — shows locally saved deployments and lets you replace a saved project's Vercel environment variable (across production, preview, and development), then redeploys.
 - `vins` — verifies the CLI's external dependencies (`git`, GitHub CLI `gh`, and the Vercel CLI via `npx`) and automatically installs anything missing using your system's package manager (`apt-get`/`dnf`/`pacman` on Linux, `brew` on macOS, `winget`/`choco` on Windows). Prints manual install links for anything it can't install automatically.
 - `info` / `.info` — prints package, bridge, repository, and local data paths.
@@ -60,12 +60,14 @@ On Windows CMD, these commands do not require Unix tools such as `find` or `xarg
    - `UMAMI_API_CLIENT_ENDPOINT=https://api.umami.is/v1`
    - `SUPABASE_SERVICE_ROLE_KEY=0000`
 5. Adds `SUPABASE_URL` and `SUPABASE_ANON_KEY` from the bridge response.
-6. **Step 3 — deploy:**
-   - Verifies you're logged in to Vercel (`vercel whoami`); if not, runs an interactive `vercel login` and waits for it to finish.
-   - Logs in to the GitHub CLI if needed (`gh auth login`), detaches the cloned code from the template's git history, and publishes it to a **brand new private GitHub repository** under your account using the GitHub API, avoiding separate `git push` credential prompts.
-   - Links a new Vercel project with `vercel link --yes --project <name>` and connects it to the new GitHub repo with `vercel git connect` so future pushes auto-deploy.
-   - Writes every collected environment variable (including the Supabase URL/anon key) to the **production, preview, and development** environments with `vercel env add`, so the values are permanent for the project, not just the first deploy.
-   - Creates the production deployment with `vercel --prod --yes`.
+6. **Step 3 — run target:**
+   - Asks whether to run the storefront **locally** or deploy on **Vercel cloud**.
+   - Local mode writes every collected variable to `.env.local` inside the cloned Next.js app, installs dependencies (`pnpm install` when available, otherwise `npm install`), and starts `pnpm run dev`/`npm run dev` at `http://localhost:3000`.
+   - Vercel mode verifies you're logged in to Vercel (`vercel whoami`); if not, runs an interactive `vercel login` and waits for it to finish.
+   - Vercel mode logs in to the GitHub CLI if needed (`gh auth login`) and creates a user-owned repo from the hardcoded storefront source with a fork/template flow, avoiding local `git push` credentials.
+   - Vercel mode links a new Vercel project with `vercel link --yes --project <name>` and connects it to the new GitHub repo with `vercel git connect` so future pushes auto-deploy.
+   - Vercel mode writes every collected environment variable (including the Supabase URL/anon key) to the **production, preview, and development** environments with `vercel env add`, so the values are permanent for the project, not just the first deploy.
+   - Vercel mode creates the production deployment with `vercel --prod --yes`.
 
 ## Dependency check (`vins`)
 
