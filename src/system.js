@@ -46,6 +46,7 @@ export function runCommandCapture(command, args, options = {}) {
     let child;
     try {
       child = spawn(executable(command), args, spawnOptions(command, options, 'pipe'));
+      if (options.input) child.stdin.end(options.input);
     } catch (error) {
       resolve({ code: null, stdout: '', stderr: '', error });
       return;

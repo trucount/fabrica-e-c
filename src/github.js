@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import process from 'node:process';
 import { commandExists, runCommand, runCommandCapture } from './system.js';
 import { choose } from './prompt.js';
@@ -35,12 +37,12 @@ export async function ensureGithubLogin() {
     kv('GitHub', 'Logged in');
   }
 
-  const gitSpin = spinner('Configuring GitHub credentials for git push');
+  const gitSpin = spinner('Configuring GitHub API credentials');
   if (await setupGithubGitCredentials()) {
-    gitSpin.succeed('GitHub credentials ready for git push');
+    gitSpin.succeed('GitHub API credentials ready');
   } else {
     gitSpin.fail('Could not configure GitHub git credentials automatically');
-    console.log('If git push asks for credentials, complete the prompt or run: gh auth setup-git');
+    console.log('Continuing with GitHub API publishing; if Git later asks for credentials, run: gh auth setup-git');
   }
 }
 
@@ -59,7 +61,7 @@ async function ensureGithubRepo(owner, repoName) {
   const fullName = `${owner}/${repoName}`;
   if (await githubRepoExists(owner, repoName)) {
     const action = await choose(`GitHub repo ${fullName} already exists. What should Fabrica do?`, [
-      { name: 'Use the existing repo and push this storefront to it', value: 'use' },
+      { name: 'Use the existing repo and publish this storefront to it', value: 'use' },
       { name: 'Stop so I can choose a different Vercel project/repo name', value: 'stop' }
     ]);
     if (action === 'stop') throw new Error(`GitHub repo ${fullName} already exists. Re-run build with a different project name.`);
@@ -84,41 +86,65 @@ async function setOrigin(project, repoUrl) {
   }
 }
 
-async function pushWithCredentialFallback(project) {
-  const spin = spinner('Pushing storefront to GitHub');
-  let push = await runCommandCapture('git', ['push', '-u', 'origin', 'main'], { cwd: project.target });
-  if (push.code === 0) {
-    spin.succeed('Pushed storefront to GitHub');
-    return;
-  }
 
-  spin.fail('Initial git push failed');
-  console.log('GitHub rejected the push credentials. Re-configuring GitHub CLI credentials and retrying...');
-  await setupGithubGitCredentials();
-  push = await runCommandCapture('git', ['push', '-u', 'origin', 'main'], { cwd: project.target });
-  if (push.code === 0) {
-    kv('GitHub push', 'Succeeded after refreshing credentials');
-    return;
-  }
-
-  console.log(push.stderr || push.stdout || 'git push failed');
-  const action = await choose('GitHub push still needs authentication. What should Fabrica do?', [
-    { name: 'Open GitHub login again, then retry push', value: 'login' },
-    { name: 'Stop so I can fix GitHub credentials manually', value: 'stop' }
-  ]);
-  if (action === 'login') {
-    await runCommand('gh', ['auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web']);
-    await setupGithubGitCredentials();
-    await runCommand('git', ['push', '-u', 'origin', 'main'], { cwd: project.target });
-    kv('GitHub push', 'Succeeded after login');
-    return;
-  }
-  throw new Error('GitHub push failed. Run "gh auth setup-git" or "gh auth login", then rerun build.');
+async function ghApiJson(args, body) {
+  const result = await runCommandCapture('gh', ['api', ...args, '--input', '-'], { input: JSON.stringify(body) });
+  if (result.code !== 0) throw new Error(result.stderr || result.stdout || `gh api ${args.join(' ')} failed`);
+  return result.stdout ? JSON.parse(result.stdout) : {};
 }
+
+async function ghApiGet(args) {
+  const result = await runCommandCapture('gh', ['api', ...args]);
+  if (result.code !== 0) return null;
+  return result.stdout ? JSON.parse(result.stdout) : {};
+}
+
+async function listTrackedFiles(project) {
+  const result = await runCommandCapture('git', ['ls-files', '-z'], { cwd: project.target });
+  if (result.code !== 0) throw new Error(result.stderr || 'Could not list storefront files for GitHub upload.');
+  return result.stdout.split('\0').filter(Boolean);
+}
+
+async function createGithubBlob(project, owner, repoName, filePath) {
+  const absolute = path.join(project.target, filePath);
+  const content = await fs.readFile(absolute);
+  const blob = await ghApiJson([`repos/${owner}/${repoName}/git/blobs`], {
+    content: content.toString('base64'),
+    encoding: 'base64'
+  });
+  return { path: filePath.replace(/\\/g, '/'), mode: '100644', type: 'blob', sha: blob.sha };
+}
+
+async function publishWithGithubApi(project, owner, repoName) {
+  const spin = spinner('Publishing storefront through GitHub API');
+  const files = await listTrackedFiles(project);
+  const treeItems = [];
+  for (const filePath of files) {
+    treeItems.push(await createGithubBlob(project, owner, repoName, filePath));
+  }
+
+  const tree = await ghApiJson([`repos/${owner}/${repoName}/git/trees`], { tree: treeItems });
+
+  const existingRef = await ghApiGet([`repos/${owner}/${repoName}/git/ref/heads/main`]);
+  const parents = existingRef?.object?.sha ? [existingRef.object.sha] : [];
+  const commit = await ghApiJson([`repos/${owner}/${repoName}/git/commits`], {
+    message: 'Initial commit from Fabrica storefront',
+    tree: tree.sha,
+    parents
+  });
+
+  if (existingRef?.ref) {
+    await ghApiJson([`repos/${owner}/${repoName}/git/refs/heads/main`, '--method', 'PATCH'], { sha: commit.sha, force: true });
+  } else {
+    await ghApiJson([`repos/${owner}/${repoName}/git/refs`], { ref: 'refs/heads/main', sha: commit.sha });
+  }
+  spin.succeed('Published storefront to GitHub without git push');
+}
+
 
 // Re-homes the cloned storefront code into a brand new GitHub repository
 // owned by the logged-in user, so the deployed Vercel project can stay
-// connected to that repo (git push -> auto deploy) instead of the original
+// connected to that repo (future changes can auto deploy) instead of the original
 // template repository.
 export async function createGithubRepoFromClone(project) {
   section('GitHub repository');
@@ -140,7 +166,7 @@ export async function createGithubRepoFromClone(project) {
 
   await ensureGithubRepo(owner, repoName);
   await setOrigin(project, repoUrl);
-  await pushWithCredentialFallback(project);
+  await publishWithGithubApi(project, owner, repoName);
 
   const browserUrl = `https://github.com/${owner}/${repoName}`;
   kv('GitHub repo', browserUrl);

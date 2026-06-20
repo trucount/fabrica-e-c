@@ -21,7 +21,7 @@ export function help() {
   banner();
   console.log(`
 ${orange('Commands')}
-  ${bold('build')}      Connect Supabase, collect secrets, clone the store, push to a new GitHub repo, deploy to Vercel
+  ${bold('build')}      Connect Supabase, collect secrets, clone the store, publish to a new GitHub repo, deploy to Vercel
   ${bold('list')}       Show deployed Fabrica projects and edit env variables
   ${bold('vins')}       Verify CLI dependencies (git, gh, vercel) and auto-install anything missing
   ${bold('info')}       Show package, bridge, repo, and local storage information
