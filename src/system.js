@@ -7,14 +7,19 @@ function executable(command) {
   return command;
 }
 
-function spawnOptions(options = {}, stdio) {
+function shouldUseShell(command) {
+  if (process.platform !== 'win32') return false;
+  // Only Windows command shims need a shell. Real executables such as git.exe
+  // must keep shell:false so arguments containing spaces (for example
+  // `-c user.name=Fabrica CLI`) are passed intact instead of being split by
+  // cmd.exe.
+  return ['npm', 'npx'].includes(command) || /\.(cmd|bat)$/i.test(command);
+}
+
+function spawnOptions(command, options = {}, stdio) {
   return {
     stdio,
-    // Windows package-manager shims such as npm.cmd/npx.cmd can throw
-    // `spawn EINVAL` when launched directly from some terminals. Running
-    // through the platform shell preserves Unix behavior while making those
-    // Windows shim commands reliable.
-    shell: process.platform === 'win32',
+    shell: shouldUseShell(command),
     cwd: options.cwd,
     env: options.env || process.env
   };
@@ -22,7 +27,7 @@ function spawnOptions(options = {}, stdio) {
 
 export function runCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(executable(command), args, spawnOptions(options, options.input ? ['pipe', 'inherit', 'inherit'] : 'inherit'));
+    const child = spawn(executable(command), args, spawnOptions(command, options, options.input ? ['pipe', 'inherit', 'inherit'] : 'inherit'));
     if (options.input) child.stdin.end(options.input);
     child.on('error', (error) => {
       if (options.allowFailure) resolve();
@@ -40,7 +45,7 @@ export function runCommandCapture(command, args, options = {}) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(executable(command), args, spawnOptions(options, 'pipe'));
+      child = spawn(executable(command), args, spawnOptions(command, options, 'pipe'));
     } catch (error) {
       resolve({ code: null, stdout: '', stderr: '', error });
       return;
