@@ -3,9 +3,12 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { connectSupabase } from './bridge.js';
-import { collectEnv, cloneRepo, deployToVercel, editProjectEnv } from './deploy.js';
+import { collectEnv, cloneRepo, deployToVercel, editProjectEnv, ensureVercelLogin, runLocally } from './deploy.js';
+import { createGithubRepoFromClone } from './github.js';
+import { ensureDependencies, vinsCommand } from './deps.js';
 import { BRIDGE_ORIGIN, STORE_REPO } from './config.js';
 import { dataDir, readProjects } from './store.js';
+import { choose } from './prompt.js';
 import { banner, help, kv, section } from './ui.js';
 
 async function packageVersion() {
@@ -16,15 +19,35 @@ async function packageVersion() {
 
 async function build() {
   banner();
+
+  section('Dependency check');
+  await ensureDependencies({ names: ['git'] });
+
   section('Supabase Connect');
   kv('BRIDGE', 'ONLINE');
   kv('SQL', 'Prepared securely (hidden from UI)');
   const supabase = await connectSupabase();
   const env = await collectEnv(supabase);
   const project = await cloneRepo();
-  const record = await deployToVercel(project, env);
+
+  section('Step 3: Run target');
+  const target = await choose('Where should Fabrica run this storefront?', [
+    { name: 'Deploy on Vercel cloud', value: 'vercel' },
+    { name: 'Run locally on this computer', value: 'local' }
+  ]);
+
+  if (target === 'local') {
+    await runLocally(project, env);
+    return;
+  }
+
+  await ensureDependencies({ names: ['gh', 'vercel'] });
+  await ensureVercelLogin();
+  const githubRepo = await createGithubRepoFromClone(project);
+  const record = await deployToVercel(project, env, githubRepo);
   section('Done');
   kv('Project', record.projectName);
+  kv('GitHub repo', record.githubRepo || 'n/a');
   kv('Path', record.target);
 }
 
@@ -39,6 +62,7 @@ async function list() {
     console.log(`\n${index + 1}. ${project.projectName}`);
     kv('Created', project.createdAt);
     kv('Path', project.target);
+    kv('GitHub repo', project.githubRepo || 'n/a');
     kv('Supabase', project.supabaseUrl);
     kv('Env keys', project.envKeys.join(', '));
   });
@@ -59,6 +83,7 @@ export async function run(args) {
   if (command === 'build') return build();
   if (command === 'list') return list();
   if (command === 'info' || command === '.info') return info();
+  if (command === 'vins' || command === '/vins') return vinsCommand();
   if (command === 'help' || command === '--help' || command === '-h') return help();
   console.error(`Unknown command: ${command}`);
   help();

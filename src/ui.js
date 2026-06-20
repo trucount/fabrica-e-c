@@ -21,14 +21,16 @@ export function help() {
   banner();
   console.log(`
 ${orange('Commands')}
-  ${bold('build')}      Connect Supabase, collect secrets, clone the store, deploy to Vercel
+  ${bold('build')}      Connect Supabase, collect secrets, then run locally or deploy to Vercel
   ${bold('list')}       Show deployed Fabrica projects and edit env variables
+  ${bold('vins')}       Verify CLI dependencies (git, gh, vercel) and auto-install anything missing
   ${bold('info')}       Show package, bridge, repo, and local storage information
   ${bold('help')}       Show this help screen
 
 ${orange('Examples')}
   npx fabrica-e-commerce build
   npx fabrica-e-commerce list
+  npx fabrica-e-commerce vins
   npx fabrica-e-commerce info
 `);
 }
