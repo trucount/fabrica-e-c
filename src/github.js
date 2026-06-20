@@ -1,7 +1,7 @@
 import { commandExists, runCommand, runCommandCapture } from './system.js';
 import { STORE_REPO } from './config.js';
 import { choose } from './prompt.js';
-import { dimOrange, kv, section, spinner } from './ui.js';
+import { dimOrange, kv, section, spinner, log } from './ui.js';
 
 export async function isGithubCliInstalled() {
   return commandExists('gh');
@@ -27,7 +27,7 @@ export async function ensureGithubLogin() {
     spin.succeed('Already logged in to GitHub');
   } else {
     spin.fail('Not logged in to GitHub');
-    console.log('A browser/device flow will open so you can log in with "gh auth login"...');
+    log('A browser/device flow will open — log in with "gh auth login"...');
     await runCommand('gh', ['auth', 'login', '--hostname', 'github.com', '--git-protocol', 'https', '--web']);
     if (!(await isLoggedInToGithub())) {
       throw new Error('GitHub login was not completed. Run "fabrica build" again after logging in with "gh auth login".');
@@ -40,7 +40,7 @@ export async function ensureGithubLogin() {
     gitSpin.succeed('GitHub API credentials ready');
   } else {
     gitSpin.fail('Could not configure GitHub git credentials automatically');
-    console.log('Continuing with GitHub API publishing; if Git later asks for credentials, run: gh auth setup-git');
+    log('Continuing — if Git asks for credentials later, run: gh auth setup-git');
   }
 }
 
@@ -157,7 +157,7 @@ async function forkSourceRepo(owner, repoName) {
       }
       renameSpin.fail(`Could not rename — continuing with the existing fork name`);
       kv('GitHub repo', `https://github.com/${owner}/${actualName}`);
-      console.log(dimOrange(`  Note: this is named "${actualName}", not "${repoName}", because your GitHub account already had a fork of ${source}.`));
+      log(`Note: this is named "${actualName}", not "${repoName}", because your GitHub account already had a fork of ${source}.`);
       return actualName;
     }
 
