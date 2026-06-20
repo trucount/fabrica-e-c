@@ -1,6 +1,6 @@
 {
   "name": "fabrica-e-commerce",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "Orange themed CMD launcher for deploying Fabrica e-commerce stores with Supabase and Vercel.",
   "type": "module",
   "bin": {
