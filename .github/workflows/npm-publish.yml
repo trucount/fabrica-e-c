@@ -23,15 +23,14 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Set up Node.js for npm
-        uses: actions/setup-node@v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
+          node-version: 20
 
       - name: Install dependencies
         run: npm install
@@ -50,6 +49,12 @@ jobs:
 
       - name: Show package version to publish
         run: npm pkg get name version
+
+      - name: Set up Node.js for npm publish
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
 
       - name: Publish to npm
         run: npm publish --access public --provenance
