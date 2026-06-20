@@ -33,6 +33,9 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
 
+      - name: Install dependencies
+        run: npm install
+
       - name: Verify syntax
         run: npm run build
 
