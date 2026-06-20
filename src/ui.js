@@ -16,7 +16,6 @@ export const yellow    = (t) => chalk.hex('#ffc846')(t);
 export const gray      = (t) => chalk.hex('#888888')(t);
 export const white     = (t) => chalk.white(t);
 
-// strip ANSI for length calculations
 function stripAnsi(s) { return s.replace(/\x1b\[[0-9;]*m/g, ''); }
 
 // ── section buffer ─────────────────────────────────────────────────────────────
@@ -57,16 +56,22 @@ export function endSections() { flushSection(); }
 export function kv(key, value) {
   const k = bold(orange(key));
   const arrow = dimOrange(figures.arrowRight);
-  const v = typeof value === 'string' && value.startsWith('http') ? cyan(value) : white(String(value));
+  const v = typeof value === 'string' && value.startsWith('http')
+    ? cyan(value)
+    : white(String(value));
   addLine(`   ${dimOrange(figures.pointer)} ${k} ${arrow} ${v}`);
 }
 
 export function kvSuccess(key, value) {
-  addLine(`   ${green(figures.tick)} ${bold(key)} ${dimOrange(figures.arrowRight)} ${green(String(value))}`);
+  addLine(`   ${green(figures.tick)} ${bold(white(key))} ${dimOrange(figures.arrowRight)} ${green(String(value))}`);
 }
 
 export function kvFail(key, value) {
   addLine(`   ${red(figures.cross)} ${bold(key)} ${dimOrange(figures.arrowRight)} ${red(String(value))}`);
+}
+
+export function kvPending(key, value) {
+  addLine(`   ${dimOrange(figures.bullet)} ${bold(dimOrange(key))} ${dimOrange(figures.arrowRight)} ${dim(String(value))}`);
 }
 
 // spinner — inline stdout, then adds result line to buffer
@@ -76,7 +81,7 @@ export function spinner(text) {
   return {
     succeed(msg) {
       process.stdout.write(`\r${CLEAR_LINE}`);
-      addLine(`   ${green(figures.tick)} ${msg}`);
+      addLine(`   ${green(figures.tick)} ${white(msg)}`);
     },
     fail(msg) {
       process.stdout.write(`\r${CLEAR_LINE}`);
@@ -85,11 +90,12 @@ export function spinner(text) {
   };
 }
 
-export function log(text) { addLine(`   ${dim(figures.line)} ${text}`); }
-export function logInfo(text) { addLine(`   ${cyan(figures.info)} ${text}`); }
+export function log(text)     { addLine(`   ${dimOrange(figures.line)} ${text}`); }
+export function logInfo(text) { addLine(`   ${cyan(figures.info)} ${cyan(text)}`); }
 export function logWarn(text) { addLine(`   ${yellow(figures.warning)} ${yellow(text)}`); }
+export function logSuccess(text) { addLine(`   ${green(figures.tick)} ${green(text)}`); }
 
-export function divider() { addLine(`   ${dimOrange('─'.repeat(48))}`); }
+export function divider() { addLine(`   ${dimOrange('─'.repeat(50))}`); }
 
 // sub-step block
 export function subBox(lines, { isError = false } = {}) {
@@ -125,7 +131,7 @@ export function banner() {
 
   const subtitle = [
     cyan('  Supabase + Vercel   ·   Deploy in minutes'),
-    dim('  by SPARROW AI SOLUTION'),
+    dim('           by SPARROW AI SOLUTION'),
   ].join('\n');
 
   console.log(boxen(`${gradientArt}\n\n${subtitle}`, {
@@ -141,48 +147,49 @@ export function help() {
   banner();
 
   const commands = [
-    { cmd: 'build',  desc: 'Connect Supabase · collect secrets · deploy or run locally' },
-    { cmd: 'list',   desc: 'Show all Fabrica projects (local & cloud)' },
-    { cmd: 'env',    desc: 'View and update environment variables for any project' },
-    { cmd: 'rerun',  desc: 'Re-run or re-open an existing project' },
-    { cmd: 'vins',   desc: 'Verify & auto-install CLI dependencies (git, gh, vercel)' },
-    { cmd: 'clean',  desc: 'Remove local data, env files, or logout from Vercel / GitHub' },
-    { cmd: 'info',   desc: 'Package, bridge, repo and storage info' },
-    { cmd: 'help',   desc: 'Show this help screen' },
+    { cmd: 'build',  desc: 'Connect Supabase · collect secrets · deploy or run locally',   icon: '🚀' },
+    { cmd: 'list',   desc: 'Show all Fabrica projects (local & cloud)',                     icon: '📋' },
+    { cmd: 'env',    desc: 'View and update environment variables for any project',         icon: '⚙️ ' },
+    { cmd: 'rerun',  desc: 'Re-run or re-open an existing project',                         icon: '▶️ ' },
+    { cmd: 'vins',   desc: 'Verify & auto-install CLI deps (git, gh, vercel)',              icon: '🔧' },
+    { cmd: 'clean',  desc: 'Clean data, env files, or logout from Vercel / GitHub',        icon: '🧹' },
+    { cmd: 'info',   desc: 'Package, bridge, repo and storage info',                       icon: 'ℹ️ ' },
+    { cmd: 'help',   desc: 'Show this help screen',                                        icon: '❓' },
   ];
 
-  const cmdRows = commands.map(({ cmd, desc }) =>
-    `   ${bold(orange(cmd.padEnd(10)))}  ${dim(desc)}`
+  const cmdRows = commands.map(({ cmd, desc, icon }) =>
+    `   ${icon}  ${bold(orange(cmd.padEnd(10)))}  ${dim(desc)}`
   ).join('\n');
 
   const examples = [
-    `   ${dimOrange('$')} npx fabrica-e-commerce build`,
-    `   ${dimOrange('$')} npx fabrica-e-commerce vins`,
-    `   ${dimOrange('$')} npx fabrica-e-commerce list`,
-    `   ${dimOrange('$')} npx fabrica-e-commerce clean`,
-    `   ${dimOrange('$')} npx fabrica-e-commerce env`,
-    `   ${dimOrange('$')} npx fabrica-e-commerce rerun`,
+    `   ${dimOrange('$')} ${cyan('npx fabrica-e-commerce build')}   ${dim('# start a new store')}`,
+    `   ${dimOrange('$')} ${cyan('npx fabrica-e-commerce vins')}    ${dim('# check dependencies')}`,
+    `   ${dimOrange('$')} ${cyan('npx fabrica-e-commerce list')}    ${dim('# see all projects')}`,
+    `   ${dimOrange('$')} ${cyan('npx fabrica-e-commerce rerun')}   ${dim('# open existing project')}`,
+    `   ${dimOrange('$')} ${cyan('npx fabrica-e-commerce env')}     ${dim('# update env variables')}`,
+    `   ${dimOrange('$')} ${cyan('npx fabrica-e-commerce clean')}   ${dim('# clean up data / logout')}`,
   ].join('\n');
 
   const content = [
     bold(orange(' Commands')),
-    dimOrange('  ' + '─'.repeat(52)),
+    dimOrange('  ' + '─'.repeat(60)),
     '',
     cmdRows,
     '',
     bold(orange(' Examples')),
-    dimOrange('  ' + '─'.repeat(52)),
+    dimOrange('  ' + '─'.repeat(60)),
     '',
     examples,
     '',
-    dim(`  Creator: SPARROW AI SOLUTION   ·   MIT License`),
+    dimOrange('  ' + '─'.repeat(60)),
+    dim(`   Creator: SPARROW AI SOLUTION   ·   MIT License   ·   v${process.env.npm_package_version || ''}`),
   ].join('\n');
 
   console.log(dimOrange('  │'));
   console.log(boxen(content, {
     title: ` ${bold(orange('Help & Commands'))} `,
     titleAlignment: 'left',
-    padding: { top: 1, bottom: 1, left: 1, right: 1 },
+    padding: { top: 1, bottom: 1, left: 1, right: 2 },
     borderStyle: 'round',
     borderColor: '#ff8a00',
   }));
@@ -191,7 +198,8 @@ export function help() {
 // ── step progress ─────────────────────────────────────────────────────────────
 export function stepHeader(step, total, title) {
   endSections();
-  const badge = orange(`[${step}/${total}]`);
-  const line = `${badge} ${bold(white(title))}`;
-  console.log(`\n  ${dimOrange(figures.arrowRight)} ${line}`);
+  const pill = chalk.bgHex('#ff8a00').black(` ${step}/${total} `);
+  const line = `${pill} ${bold(white(title))}`;
+  const bar = dimOrange('─'.repeat(Math.max(0, 52 - stripAnsi(title).length - 6)));
+  console.log(`\n  ${dimOrange(figures.arrowRight)} ${line}  ${bar}`);
 }

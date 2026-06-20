@@ -4,31 +4,96 @@ import crypto from 'node:crypto';
 import { HARDCODED_ENV, REQUIRED_ENV_KEYS, STORE_REPO } from './config.js';
 import { buildsDir, saveProject } from './store.js';
 import { runCommand, runCommandCapture, openUrl } from './system.js';
-import { kv, section, endSections, spinner, subBox, log, red, dimOrange } from './ui.js';
-import { ask, choose } from './prompt.js';
+import {
+  kv, kvSuccess, kvFail, kvPending, section, endSections, spinner,
+  subBox, log, logInfo, logWarn, logSuccess, divider,
+  orange, dimOrange, bold, dim, green, cyan, red, white, yellow,
+} from './ui.js';
+import { ask, askPassword, choose } from './prompt.js';
 
 const VERCEL_ENVIRONMENTS = ['production', 'preview', 'development'];
 
+// ── Env key descriptions ───────────────────────────────────────────────────────
+const ENV_DESCRIPTIONS = {
+  RAZORPAY_KEY_ID:     'Razorpay payment key ID',
+  RAZORPAY_KEY_SECRET: 'Razorpay payment secret',
+  OPENROUTER_API_KEY:  'OpenRouter AI API key',
+  UMAMI_WEBSITE_ID:    'Umami analytics website ID',
+  UMAMI_API_KEY:       'Umami analytics API key',
+  SHIPPO_API_KEY:      'Shippo shipping API key',
+};
+
 export async function collectEnv(supabase) {
+  // ── Show what will be collected ──────────────────────────────────────────────
   section('Environment variables');
+  logInfo('The following API keys are required for your store:');
+  divider();
+  for (const key of REQUIRED_ENV_KEYS) {
+    kvPending(key, ENV_DESCRIPTIONS[key] || '');
+  }
+  divider();
+  log(dim('Enter each value below — press Enter to confirm'));
+  endSections();
+
+  // ── Collect each key interactively ───────────────────────────────────────────
+  console.log();
   const env = { ...HARDCODED_ENV, SUPABASE_URL: supabase.url, SUPABASE_ANON_KEY: supabase.anonKey };
   for (const key of REQUIRED_ENV_KEYS) {
-    endSections();           // flush so the ask() prompt appears cleanly
-    env[key] = await ask(`${key}`);
-    section('Environment variables');
+    env[key] = await ask(key);
   }
+  console.log();
+
+  // ── Summary ───────────────────────────────────────────────────────────────────
+  section('Environment variables — collected');
+  for (const key of REQUIRED_ENV_KEYS) {
+    kvSuccess(key, '••••••••');
+  }
+  logSuccess('All API keys saved');
+  endSections();
+
   return env;
+}
+
+export async function collectAdminPassword() {
+  // ── Show intent box ──────────────────────────────────────────────────────────
+  section('Admin & edit panel password');
+  logInfo('Set a password to protect your store\'s admin and edit panel.');
+  log(dim('This will be stored as the PASS environment variable.'));
+  divider();
+  log(`${orange('PASS')}  ${dimOrange('→')}  ${dim('Admin panel access password')}`);
+  endSections();
+
+  // ── Prompt ────────────────────────────────────────────────────────────────────
+  console.log();
+  const password = await askPassword('Admin panel password (PASS)');
+  console.log();
+
+  // ── Confirm ───────────────────────────────────────────────────────────────────
+  section('Admin password — set');
+  kvSuccess('PASS', '••••••••  (stored securely)');
+  endSections();
+
+  return password;
 }
 
 export async function cloneRepo() {
   endSections();
   section('Clone storefront');
-  const projectName = await ask('Vercel project name', `fabrica-store-${Date.now()}`);
+  logInfo('Enter a name for your project (used as the Vercel project name).');
+  endSections();
+
+  console.log();
+  const projectName = await ask('Project name', `fabrica-store-${Date.now()}`);
+  console.log();
+
   section('Clone storefront');
   const id = crypto.randomUUID();
   const target = path.join(buildsDir, `${projectName}-${id.slice(0, 8)}`);
-  // git clone output goes directly to inherited stdio — show it outside the box
+  kv('Project', projectName);
+  kv('Destination', dim(target));
+  log(dim('Cloning repository — this may take a moment...'));
   endSections();
+
   await runCommand('git', ['clone', STORE_REPO, target]);
   return { id, projectName, target };
 }
@@ -40,23 +105,24 @@ export async function isLoggedInToVercel() {
 
 export async function ensureVercelLogin() {
   section('Vercel login');
-  const spin = spinner('Checking Vercel login');
+  const spin = spinner('Checking Vercel login…');
   if (await isLoggedInToVercel()) {
-    spin.succeed('Already logged in to Vercel');
+    spin.succeed(green('Already logged in to Vercel'));
+    endSections();
     return;
   }
   spin.fail('Not logged in to Vercel');
-  log('Opening "vercel login" — finish the login in your browser...');
+  log(dim('Opening "vercel login" — finish the login in your browser…'));
   endSections();
   await runCommand('npx', ['vercel@latest', 'login']);
   section('Vercel login');
   if (!(await isLoggedInToVercel())) {
     throw new Error('Vercel login was not completed. Run "fabrica build" again after logging in.');
   }
-  kv('Vercel', 'Logged in');
+  kvSuccess('Vercel', 'Logged in successfully');
+  endSections();
 }
 
-// Capture vercel CLI output and add it into the current section buffer as a subBox
 async function runVercelBoxed(args, options = {}) {
   const result = await runCommandCapture('npx', ['vercel@latest', ...args], options);
   const raw = ((result.stdout || '') + (result.stderr || '')).trim();
@@ -68,23 +134,35 @@ async function runVercelBoxed(args, options = {}) {
 }
 
 async function setEnvEverywhere(project, env) {
+  section('Setting environment variables');
+  logInfo(`Pushing ${Object.keys(env).length} variables to Vercel…`);
+  divider();
   for (const [key, value] of Object.entries(env)) {
     const spin = spinner(`Setting ${key}`);
     for (const environment of VERCEL_ENVIRONMENTS) {
       await runVercelBoxed(['env', 'rm', key, environment, '--yes'], { cwd: project.target, allowFailure: true });
       await runVercelBoxed(['env', 'add', key, environment], { cwd: project.target, input: `${value}\n` });
     }
-    spin.succeed(`Set ${key} (production, preview, development)`);
+    spin.succeed(`${green(key)}  ${dimOrange('→')}  ${dim('production · preview · development')}`);
   }
+  divider();
+  logSuccess('All environment variables pushed to Vercel');
 }
 
 async function connectGithubRepo(project, repoUrl) {
-  const spin = spinner(`Connecting Vercel project to ${repoUrl}`);
+  const spin = spinner(`Connecting Vercel project to GitHub…`);
   const attempts = 6;
   let lastError = '';
   for (let attempt = 1; attempt <= attempts; attempt++) {
-    const connect = await runCommandCapture('npx', ['--yes', 'vercel@latest', 'git', 'connect', repoUrl, '--yes'], { cwd: project.target });
-    if (connect.code === 0) { spin.succeed('Vercel project connected to GitHub repo'); return true; }
+    const connect = await runCommandCapture(
+      'npx',
+      ['--yes', 'vercel@latest', 'git', 'connect', repoUrl, '--yes'],
+      { cwd: project.target }
+    );
+    if (connect.code === 0) {
+      spin.succeed(`${green('GitHub repo connected')}  ${dim(repoUrl)}`);
+      return true;
+    }
     lastError = (connect.stderr || connect.stdout || '').trim();
     if (attempt < attempts) await new Promise((r) => setTimeout(r, attempt * 3000));
   }
@@ -111,9 +189,11 @@ export async function deployToVercel(project, env, githubRepo) {
     await connectGithubRepo(project, githubRepo.repoUrl);
   }
 
+  endSections();
   await setEnvEverywhere(project, env);
 
-  const deploySpin = spinner('Creating production deployment');
+  section('Vercel deployment');
+  const deploySpin = spinner('Creating production deployment…');
   const deployResult = await runCommandCapture('npx', ['vercel@latest', '--prod', '--yes'], { cwd: project.target });
   const deployOutput = ((deployResult.stdout || '') + (deployResult.stderr || '')).trim();
 
@@ -127,12 +207,11 @@ export async function deployToVercel(project, env, githubRepo) {
   }
 
   subBox(deployOutput.split('\n').filter(Boolean));
-  deploySpin.succeed('Production deployment created');
+  deploySpin.succeed('Production deployment created successfully');
 
   const openTarget = aliasedUrl || productionUrl;
   if (openTarget) {
-    kv('Opening', openTarget);
-    // open after flush
+    kv('Live URL', openTarget);
     process.nextTick(() => openUrl(openTarget));
   }
 
@@ -162,7 +241,7 @@ export async function updateProjectEnv(project, key, value) {
     if (idx >= 0) lines[idx] = `${key}=${value}`;
     else lines.push(`${key}=${value}`);
     await fs.writeFile(envPath, lines.join('\n'), 'utf8');
-    kv('Updated', `${key} in .env.local`);
+    kvSuccess('Updated', `${key} → .env.local`);
   } else {
     await ensureVercelLogin();
     section('Applying update');
@@ -170,9 +249,9 @@ export async function updateProjectEnv(project, key, value) {
       await runVercelBoxed(['env', 'rm', key, environment, '--yes'], { cwd: project.target, allowFailure: true });
       await runVercelBoxed(['env', 'add', key, environment], { cwd: project.target, input: `${value}\n` });
     }
-    const spin = spinner('Redeploying...');
+    const spin = spinner('Redeploying…');
     await runVercelBoxed(['--prod', '--yes'], { cwd: project.target });
-    spin.succeed(`Redeployed ${project.projectName}`);
+    spin.succeed(`Redeployed ${green(project.projectName)}`);
   }
   const updated = { ...project, env: { ...(project.env || {}), [key]: value } };
   await saveProject(updated);
@@ -180,10 +259,12 @@ export async function updateProjectEnv(project, key, value) {
 
 export async function runLocally(project, env) {
   section('Local setup');
+  logInfo('Writing environment file and starting dev server…');
+  divider();
   const envPath = path.join(project.target, '.env.local');
   const contents = Object.entries(env).map(([k, v]) => `${k}=${String(v).replace(/\n/g, '\\n')}`).join('\n') + '\n';
   await fs.writeFile(envPath, contents, 'utf8');
-  kv('Env file', envPath);
+  kvSuccess('Env file', envPath);
 
   const hasPnpmLock = await fs.access(path.join(project.target, 'pnpm-lock.yaml')).then(() => true, () => false);
   const pnpmAvailable = (await runCommandCapture('pnpm', ['--version'])).code === 0;
@@ -198,15 +279,18 @@ export async function runLocally(project, env) {
   await saveProject(record);
 
   kv('URL', 'http://localhost:3000');
-  log('Installing dependencies...');
+  log(dim('Installing dependencies — this may take a while…'));
   endSections();
+
   await runCommand(installCmd[0], installCmd[1], { cwd: project.target });
 
   section('Local app');
-  kv('Path', project.target);
+  kvSuccess('Project', project.projectName);
+  kv('Path', dim(project.target));
   kv('URL',  'http://localhost:3000');
-  log('Starting dev server — browser opens in 3s...');
+  log(dim('Starting dev server — browser opens in 3s…'));
   endSections();
+
   setTimeout(() => openUrl('http://localhost:3000'), 3000);
   await runCommand(devCmd[0], devCmd[1], { cwd: project.target });
 }
