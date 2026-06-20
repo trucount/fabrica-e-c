@@ -38,8 +38,9 @@ On Windows CMD, these commands do not require Unix tools such as `find` or `xarg
 
 ## Commands
 
-- `build` — creates a Fabrica Connect Supabase job, opens the OAuth bridge, asks for required secrets, clones `https://github.com/trucount/fabrica-final-e-c.git`, links a Vercel project, writes production environment variables, and deploys with `vercel --prod`.
-- `list` — shows locally saved deployments and lets you replace a saved project's Vercel production environment variable, then redeploys.
+- `build` — checks dependencies (git, GitHub CLI, Vercel CLI), creates a Fabrica Connect Supabase job, opens the OAuth bridge, asks for required secrets, clones `https://github.com/trucount/fabrica-final-e-c.git`, verifies/logs in to Vercel (`vercel login`), pushes that code to a **new GitHub repository** under your account, connects the Vercel project to that repo for continuous deployment, writes every environment variable to production/preview/development, and deploys with `vercel --prod`.
+- `list` — shows locally saved deployments and lets you replace a saved project's Vercel environment variable (across production, preview, and development), then redeploys.
+- `vins` — verifies the CLI's external dependencies (`git`, GitHub CLI `gh`, and the Vercel CLI via `npx`) and automatically installs anything missing using your system's package manager (`apt-get`/`dnf`/`pacman` on Linux, `brew` on macOS, `winget`/`choco` on Windows). Prints manual install links for anything it can't install automatically.
 - `info` / `.info` — prints package, bridge, repository, and local data paths.
 - `help` — prints the command guide.
 
@@ -59,7 +60,22 @@ On Windows CMD, these commands do not require Unix tools such as `find` or `xarg
    - `UMAMI_API_CLIENT_ENDPOINT=https://api.umami.is/v1`
    - `SUPABASE_SERVICE_ROLE_KEY=0000`
 5. Adds `SUPABASE_URL` and `SUPABASE_ANON_KEY` from the bridge response.
-6. Uses `npx vercel@latest link --yes --project <name>`, `vercel env add`, and `vercel --prod --yes` to deploy from the cloned repo.
+6. **Step 3 — deploy:**
+   - Verifies you're logged in to Vercel (`vercel whoami`); if not, runs an interactive `vercel login` and waits for it to finish.
+   - Logs in to the GitHub CLI if needed (`gh auth login`), detaches the cloned code from the template's git history, and pushes it to a **brand new private GitHub repository** under your account via `gh repo create --source . --push`.
+   - Links a new Vercel project with `vercel link --yes --project <name>` and connects it to the new GitHub repo with `vercel git connect` so future pushes auto-deploy.
+   - Writes every collected environment variable (including the Supabase URL/anon key) to the **production, preview, and development** environments with `vercel env add`, so the values are permanent for the project, not just the first deploy.
+   - Creates the production deployment with `vercel --prod --yes`.
+
+## Dependency check (`vins`)
+
+Run `npx fabrica-e-commerce vins` any time to verify the tools the CLI depends on:
+
+```bash
+npx fabrica-e-commerce vins
+```
+
+It checks for `git`, the GitHub CLI (`gh`), and the Vercel CLI (via `npx`), and tries to install anything missing using the right package manager for your OS. If a tool can't be installed automatically (for example, no package manager is available), it prints a manual install link and exits with a non-zero status so scripts can detect the failure.
 
 
 
@@ -99,4 +115,6 @@ Deployment metadata is saved to `~/.fabrica-ecommerce/projects.json`. Secret val
 
 - Node.js 18.17+
 - Git installed and available in PATH
-- A Vercel account. The Vercel CLI will prompt/login when required.
+- [GitHub CLI](https://github.com/cli/cli) (`gh`) installed and available in PATH — used to create the new repository and push the storefront code. Logging in (`gh auth login`) is handled interactively by `build` if needed.
+- A Vercel account. The Vercel CLI will prompt/login when required (`build` also runs this check up front).
+- Run `npx fabrica-e-commerce vins` to check for and auto-install `git`/`gh` if either is missing.
