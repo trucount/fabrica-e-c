@@ -23,6 +23,37 @@ export function runCommand(command, args, options = {}) {
   });
 }
 
+// Same as runCommand but captures stdout/stderr instead of inheriting the
+// parent terminal. Used for silent checks (login status, version probes)
+// where we don't want tool noise printed to the user. Never rejects on a
+// non-zero exit code or missing binary; callers inspect `code`/`error`.
+export function runCommandCapture(command, args, options = {}) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(executable(command), args, {
+        stdio: 'pipe',
+        shell: false,
+        cwd: options.cwd
+      });
+    } catch (error) {
+      resolve({ code: null, stdout: '', stderr: '', error });
+      return;
+    }
+    let stdout = '';
+    let stderr = '';
+    child.stdout?.on('data', (chunk) => { stdout += chunk; });
+    child.stderr?.on('data', (chunk) => { stderr += chunk; });
+    child.on('error', (error) => resolve({ code: null, stdout, stderr, error }));
+    child.on('exit', (code) => resolve({ code, stdout, stderr }));
+  });
+}
+
+export function commandExists(command) {
+  const probe = process.platform === 'win32' ? ['where', [command]] : ['which', [command]];
+  return runCommandCapture(probe[0], probe[1]).then((result) => result.code === 0);
+}
+
 export async function openUrl(url) {
   if (process.platform === 'win32') {
     await runCommand('cmd', ['/c', 'start', '', url], { allowFailure: true });
