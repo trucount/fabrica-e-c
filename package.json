@@ -1,7 +1,7 @@
 {
   "name": "fabrica-e-commerce",
-  "version": "0.1.17",
-  "description": "Orange themed CMD launcher for deploying Fabrica e-commerce stores with Supabase and Vercel.",
+  "version": "0.2.0",
+  "description": "CLI launcher for deploying Fabrica e-commerce stores — Supabase + Vercel, works on Windows, macOS, Linux & Termux.",
   "type": "module",
   "bin": {
     "fabrica": "bin/fabrica.js",
@@ -25,9 +25,11 @@
     "ecommerce",
     "supabase",
     "vercel",
-    "cli"
+    "cli",
+    "storefront",
+    "nextjs"
   ],
-  "author": "Fabrica",
+  "author": "SPARROW AI SOLUTION",
   "license": "MIT",
   "engines": {
     "node": ">=18.17"
@@ -41,6 +43,11 @@
     "url": "https://github.com/trucount/fabrica-e-c/issues"
   },
   "dependencies": {
-    "boxen": "^8.0.1"
+    "boxen": "^8.0.1",
+    "chalk": "^5.4.1",
+    "cli-table3": "^0.6.5",
+    "figures": "^6.1.0",
+    "gradient-string": "^3.0.0",
+    "ora": "^8.2.0"
   }
 }
