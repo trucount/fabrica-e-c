@@ -6,10 +6,11 @@ import { connectSupabase } from './bridge.js';
 import { collectEnv, cloneRepo, deployToVercel, updateProjectEnv, ensureVercelLogin, runLocally } from './deploy.js';
 import { createGithubRepoFromClone } from './github.js';
 import { ensureDependencies, vinsCommand } from './deps.js';
+import { cleanCommand } from './clean.js';
 import { BRIDGE_ORIGIN, STORE_REPO } from './config.js';
 import { dataDir, readProjects } from './store.js';
 import { choose, ask } from './prompt.js';
-import { banner, help, kv, section, endSections, subBox, log } from './ui.js';
+import { banner, help, kv, kvSuccess, kvFail, section, endSections, subBox, log, logInfo, logWarn, divider, stepHeader, orange, dimOrange, bold, dim, green, cyan } from './ui.js';
 import { openUrl } from './system.js';
 
 async function packageVersion() {
@@ -22,39 +23,54 @@ async function packageVersion() {
 async function build() {
   banner();
 
+  stepHeader(1, 5, 'Dependency check');
   section('Dependency check');
   await ensureDependencies({ names: ['git'] });
+  endSections();
 
-  section('Supabase Connect');
-  kv('BRIDGE', 'ONLINE');
-  kv('SQL', 'Prepared securely (hidden from UI)');
+  stepHeader(2, 5, 'Supabase connect');
+  section('Supabase connect');
+  kv('Bridge', 'ONLINE');
+  kv('SQL',    'Prepared securely (hidden from UI)');
   const supabase = await connectSupabase();
+  endSections();
 
+  stepHeader(3, 5, 'Environment variables');
   const env = await collectEnv(supabase);
+
+  stepHeader(4, 5, 'Clone storefront');
   const project = await cloneRepo();
 
-  section('Run target');
-  const target = await choose('Where should Fabrica run this storefront?', [
-    { name: 'Deploy on Vercel cloud', value: 'vercel' },
-    { name: 'Run locally on this computer', value: 'local' },
+  stepHeader(5, 5, 'Deploy target');
+  section('Where should Fabrica deploy?');
+  endSections();
+
+  const target = await choose('Select deployment target:', [
+    { name: '☁  Deploy on Vercel (cloud, shareable URL)', value: 'vercel' },
+    { name: '💻  Run locally on this computer',           value: 'local' },
   ]);
 
   if (target === 'local') {
     await runLocally(project, env);
-    endSections();
     return;
   }
 
+  section('Cloud deployment — checking tools');
   await ensureDependencies({ names: ['gh', 'vercel'] });
+  endSections();
+
   await ensureVercelLogin();
   const githubRepo = await createGithubRepoFromClone(project);
   const record = await deployToVercel(project, env, githubRepo);
 
-  section('Done');
-  kv('Project', record.projectName);
-  kv('GitHub repo', record.githubRepo || 'n/a');
-  kv('URL', record.productionUrl || 'n/a');
-  kv('Path', record.target);
+  section('✓ Deployment complete');
+  divider();
+  kv('Project',    record.projectName);
+  kv('GitHub',     record.githubRepo || dim('n/a'));
+  kv('URL',        record.productionUrl || dim('n/a'));
+  kv('Local path', record.target);
+  divider();
+  log(green('Your Fabrica store is live!'));
   endSections();
 }
 
@@ -65,28 +81,36 @@ async function list() {
 
   section('Your Fabrica projects');
   if (!projects.length) {
-    log('No projects found. Run: fabrica build');
+    logInfo('No projects found');
+    log('Run: npx fabrica-e-commerce build');
     endSections();
     return;
   }
 
+  kv('Total projects', String(projects.length));
+  divider();
+  for (const p of projects) {
+    const type = p.type === 'local' ? cyan('local') : green('cloud');
+    log(`${bold(p.projectName)}  ${type}  ${dim(p.createdAt?.slice(0,10) || '')}`);
+  }
+  endSections();
+
   const choices = projects.map((p) => ({
-    name: `${p.projectName} (${p.type === 'local' ? 'local' : 'cloud'})`,
+    name: `${p.projectName}  (${p.type === 'local' ? 'local' : 'cloud'})`,
     value: p.id,
   }));
 
-  endSections(); // flush before interactive prompt
   const selected = await choose('Select a project to view details:', choices);
   const project = projects.find((p) => p.id === selected);
 
-  section(`Project: ${project.projectName}`);
-  kv('Type',      project.type === 'local' ? 'local' : 'cloud');
-  kv('Created',   project.createdAt);
-  kv('Path',      project.target);
-  kv('GitHub',    project.githubRepo || 'n/a');
-  kv('Supabase',  project.supabaseUrl || 'n/a');
-  kv('URL',       project.productionUrl || 'n/a');
-  kv('Env keys',  (project.envKeys || []).join(', '));
+  section(`Project: ${bold(project.projectName)}`);
+  kv('Type',      project.type === 'local' ? cyan('local') : green('cloud'));
+  kv('Created',   project.createdAt || dim('unknown'));
+  kv('Path',      project.target || dim('n/a'));
+  kv('GitHub',    project.githubRepo || dim('n/a'));
+  kv('Supabase',  project.supabaseUrl || dim('n/a'));
+  kv('URL',       project.productionUrl || dim('n/a'));
+  kv('Env keys',  (project.envKeys || []).join(', ') || dim('none'));
   endSections();
 }
 
@@ -97,28 +121,29 @@ async function env() {
 
   section('Environment manager');
   if (!projects.length) {
-    log('No projects found. Run: fabrica build');
+    logInfo('No projects found');
+    log('Run: npx fabrica-e-commerce build');
     endSections();
     return;
   }
   endSections();
 
   const typeFilter = await choose('Which projects to show?', [
-    { name: 'All projects',                  value: 'all' },
-    { name: 'Local projects only',           value: 'local' },
-    { name: 'Cloud (Vercel) projects only',  value: 'cloud' },
+    { name: 'All projects',                 value: 'all' },
+    { name: 'Local projects only',          value: 'local' },
+    { name: 'Cloud (Vercel) projects only', value: 'cloud' },
   ]);
 
   const filtered = typeFilter === 'all' ? projects : projects.filter((p) => p.type === typeFilter);
   if (!filtered.length) {
     section('Environment manager');
-    log(`No ${typeFilter} projects found.`);
+    log(`No ${typeFilter} projects found`);
     endSections();
     return;
   }
 
   const projectId = await choose('Select project:', filtered.map((p) => ({
-    name: `${p.projectName} (${p.type === 'local' ? 'local' : 'cloud'})`,
+    name: `${p.projectName}  (${p.type === 'local' ? 'local' : 'cloud'})`,
     value: p.id,
   })));
   const project = filtered.find((p) => p.id === projectId);
@@ -126,7 +151,7 @@ async function env() {
   const envKeys = project.envKeys || [];
   if (!envKeys.length) {
     section('Environment manager');
-    log('No env keys stored for this project.');
+    logWarn('No env keys stored for this project');
     endSections();
     return;
   }
@@ -137,7 +162,7 @@ async function env() {
 
   section('Applying update');
   await updateProjectEnv(project, key, value);
-  kv('Updated', `${key} → ${project.type === 'local' ? '.env.local' : 'Vercel + redeployed'}`);
+  kvSuccess('Updated', `${key} → ${project.type === 'local' ? '.env.local' : 'Vercel + redeployed'}`);
   endSections();
 }
 
@@ -148,38 +173,39 @@ async function rerun() {
 
   section('Re-run / re-open project');
   if (!projects.length) {
-    log('No projects found. Run: fabrica build');
+    logInfo('No projects found');
+    log('Run: npx fabrica-e-commerce build');
     endSections();
     return;
   }
   endSections();
 
   const typeFilter = await choose('Which type of project?', [
-    { name: 'All projects',           value: 'all' },
-    { name: 'Local projects',         value: 'local' },
-    { name: 'Cloud (Vercel) projects', value: 'cloud' },
+    { name: 'All projects',              value: 'all' },
+    { name: 'Local projects',            value: 'local' },
+    { name: 'Cloud (Vercel) projects',   value: 'cloud' },
   ]);
 
   const filtered = typeFilter === 'all' ? projects : projects.filter((p) => p.type === typeFilter);
   if (!filtered.length) {
     section('Re-run / re-open project');
-    log(`No ${typeFilter} projects found.`);
+    log(`No ${typeFilter} projects found`);
     endSections();
     return;
   }
 
   const projectId = await choose('Select project to re-run:', filtered.map((p) => ({
-    name: `${p.projectName} (${p.type === 'local' ? 'local' : 'cloud'})`,
+    name: `${p.projectName}  (${p.type === 'local' ? 'local' : 'cloud'})`,
     value: p.id,
   })));
   const project = filtered.find((p) => p.id === projectId);
 
-  section(`Re-running: ${project.projectName}`);
+  section(`Re-running: ${bold(project.projectName)}`);
 
   if (project.type === 'local') {
     kv('Path', project.target);
     kv('URL',  'http://localhost:3000');
-    log('Starting dev server — browser opens in 3s...');
+    log('Starting dev server — browser opens in 3s…');
     endSections();
 
     const { runCommand, runCommandCapture } = await import('./system.js');
@@ -191,11 +217,11 @@ async function rerun() {
     await runCommand(devCommand[0], devCommand[1], { cwd: project.target });
   } else {
     const url = project.productionUrl || null;
-    kv('GitHub',  project.githubRepo || 'n/a');
-    kv('URL',     url || 'n/a');
-    kv('Inspect', project.inspectUrl || 'n/a');
-    kv('Created', project.createdAt);
-    if (url) { log(`Opening ${url} ...`); }
+    kv('GitHub',  project.githubRepo || dim('n/a'));
+    kv('URL',     url || dim('n/a'));
+    kv('Inspect', project.inspectUrl || dim('n/a'));
+    kv('Created', project.createdAt || dim('unknown'));
+    if (url) log(`Opening ${url} …`);
     endSections();
     if (url) await openUrl(url);
   }
@@ -209,7 +235,8 @@ async function info() {
   kv('Bridge',     BRIDGE_ORIGIN);
   kv('Store repo', STORE_REPO);
   kv('Local data', dataDir);
-  kv('Node',       process.version);
+  kv('Node.js',    process.version);
+  kv('Platform',   process.platform);
   kv('Creator',    'SPARROW AI SOLUTION');
   endSections();
 }
@@ -217,13 +244,16 @@ async function info() {
 // ── router ────────────────────────────────────────────────────────────────────
 export async function run(args) {
   const command = args[0] || 'help';
-  if (command === 'build')                                              return build();
-  if (command === 'list')                                               return list();
-  if (command === 'env')                                                return env();
-  if (command === 'rerun')                                              return rerun();
-  if (command === 'info'  || command === '.info')                       return info();
-  if (command === 'vins'  || command === '/vins')                       return vinsCommand();
-  if (command === 'help'  || command === '--help' || command === '-h')  return help();
+
+  if (command === 'build')                                               return build();
+  if (command === 'list')                                                return list();
+  if (command === 'env')                                                 return env();
+  if (command === 'rerun')                                               return rerun();
+  if (command === 'clean')                                               return cleanCommand();
+  if (command === 'info'  || command === '.info')                        return info();
+  if (command === 'vins'  || command === '/vins')                        return vinsCommand();
+  if (command === 'help'  || command === '--help' || command === '-h')   return help();
+
   console.error(`Unknown command: ${command}`);
   help();
   process.exitCode = 1;
