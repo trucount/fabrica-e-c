@@ -2,15 +2,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { commandExists, runCommand, runCommandCapture } from './system.js';
-import { kv, section, spinner } from './ui.js';
+import { kv, section, spinner, subBox } from './ui.js';
 
-// Some systems (root containers, minimal CI images) have no `sudo` binary
-// at all. Fall back to running the command directly in that case instead
-// of failing outright.
+// ── platform detection ────────────────────────────────────────────────────────
+function isTermux() {
+  return process.platform === 'android' ||
+    (process.platform === 'linux' && (process.env.TERMUX_VERSION || process.env.PREFIX?.includes('com.termux')));
+}
+
 async function runPrivileged(command, args, options = {}) {
-  if (await commandExists('sudo')) {
-    return runCommand('sudo', [command, ...args], options);
-  }
+  if (process.platform === 'win32') return runCommand(command, args, options);
+  if (isTermux()) return runCommand(command, args, options); // Termux: no sudo
+  if (await commandExists('sudo')) return runCommand('sudo', [command, ...args], options);
   return runCommand(command, args, options);
 }
 
@@ -18,9 +21,7 @@ function runPrivilegedShell(script, options = {}) {
   return runCommand('bash', ['-c', script], options);
 }
 
-// Dependencies the package actually shells out to. "git" and "gh" (GitHub
-// CLI) are real external binaries we depend on; "vercel" is fetched on
-// demand through npx so we just confirm npm/npx can resolve it.
+// ── dependency definitions ────────────────────────────────────────────────────
 const DEPENDENCIES = [
   {
     name: 'git',
@@ -45,7 +46,7 @@ const DEPENDENCIES = [
   }
 ];
 
-
+// ── PATH helpers ──────────────────────────────────────────────────────────────
 function addToPathIfDirectory(directory) {
   if (!directory || !fs.existsSync(directory)) return;
   const delimiter = path.delimiter;
@@ -58,16 +59,16 @@ function addToPathIfDirectory(directory) {
 
 function refreshWindowsToolPaths() {
   if (process.platform !== 'win32') return;
-  const localAppData = process.env.LOCALAPPDATA;
-  const programFiles = process.env.ProgramFiles;
-  const programFilesX86 = process.env['ProgramFiles(x86)'];
-  const programData = process.env.ProgramData;
-  addToPathIfDirectory(localAppData && path.join(localAppData, 'Microsoft', 'WinGet', 'Links'));
-  addToPathIfDirectory(programFiles && path.join(programFiles, 'GitHub CLI'));
-  addToPathIfDirectory(programFilesX86 && path.join(programFilesX86, 'GitHub CLI'));
-  addToPathIfDirectory(programData && path.join(programData, 'chocolatey', 'bin'));
-  addToPathIfDirectory(programFiles && path.join(programFiles, 'Git', 'cmd'));
-  addToPathIfDirectory(programFiles && path.join(programFiles, 'nodejs'));
+  const lad = process.env.LOCALAPPDATA;
+  const pf  = process.env.ProgramFiles;
+  const pf86 = process.env['ProgramFiles(x86)'];
+  const pd  = process.env.ProgramData;
+  addToPathIfDirectory(lad  && path.join(lad, 'Microsoft', 'WinGet', 'Links'));
+  addToPathIfDirectory(pf   && path.join(pf, 'GitHub CLI'));
+  addToPathIfDirectory(pf86 && path.join(pf86, 'GitHub CLI'));
+  addToPathIfDirectory(pd   && path.join(pd, 'chocolatey', 'bin'));
+  addToPathIfDirectory(pf   && path.join(pf, 'Git', 'cmd'));
+  addToPathIfDirectory(pf   && path.join(pf, 'nodejs'));
 }
 
 async function checkWithPathRefresh(command) {
@@ -101,26 +102,35 @@ async function warmVercelCli() {
     ['vercel', ['--version']]
   ]);
   if (warmed.code === 0) return;
-  // Last resort: install a global Vercel binary so future invocations have a
-  // real `vercel` executable even when npx/npm exec cannot launch correctly.
   await runCommand('npm', ['install', '-g', 'vercel@latest'], { allowFailure: true });
 }
 
+// ── Git install ───────────────────────────────────────────────────────────────
 async function installGit() {
   refreshWindowsToolPaths();
   const platform = process.platform;
+
+  if (isTermux()) {
+    await runCommand('pkg', ['install', '-y', 'git'], { allowFailure: true });
+    return;
+  }
+
   if (platform === 'linux') {
     if (await commandExists('apt-get')) {
       await runPrivileged('apt-get', ['update'], { allowFailure: true });
       await runPrivileged('apt-get', ['install', '-y', 'git'], { allowFailure: true });
       return;
     }
-    if (await commandExists('dnf')) return runPrivileged('dnf', ['install', '-y', 'git'], { allowFailure: true });
-    if (await commandExists('yum')) return runPrivileged('yum', ['install', '-y', 'git'], { allowFailure: true });
+    if (await commandExists('dnf'))    return runPrivileged('dnf',    ['install', '-y', 'git'], { allowFailure: true });
+    if (await commandExists('yum'))    return runPrivileged('yum',    ['install', '-y', 'git'], { allowFailure: true });
     if (await commandExists('pacman')) return runPrivileged('pacman', ['-Sy', '--noconfirm', 'git'], { allowFailure: true });
+    if (await commandExists('zypper')) return runPrivileged('zypper', ['install', '-y', 'git'], { allowFailure: true });
+    if (await commandExists('apk'))    return runPrivileged('apk',    ['add', 'git'], { allowFailure: true });
   }
   if (platform === 'darwin') {
     if (await commandExists('brew')) return runCommand('brew', ['install', 'git'], { allowFailure: true });
+    // Xcode command line tools
+    await runCommand('xcode-select', ['--install'], { allowFailure: true });
   }
   if (platform === 'win32') {
     if (await commandExists('winget')) {
@@ -131,22 +141,26 @@ async function installGit() {
     if (await commandExists('choco')) {
       await runCommand('choco', ['install', 'git', '-y'], { allowFailure: true });
       refreshWindowsToolPaths();
-      return;
     }
   }
 }
 
+// ── GitHub CLI install ────────────────────────────────────────────────────────
 async function installGithubCli() {
   refreshWindowsToolPaths();
   const platform = process.platform;
+
+  if (isTermux()) {
+    await runCommand('pkg', ['install', '-y', 'gh'], { allowFailure: true });
+    return;
+  }
+
   if (platform === 'linux') {
     if (await commandExists('apt-get')) {
-      // Try the plain package first (present on newer Ubuntu/Debian).
       const direct = await (await commandExists('sudo')
         ? runCommandCapture('sudo', ['apt-get', 'install', '-y', 'gh'])
         : runCommandCapture('apt-get', ['install', '-y', 'gh']));
       if (direct.code === 0) return;
-      // Fall back to the official GitHub CLI apt repository setup.
       const usesSudo = await commandExists('sudo');
       const prefix = usesSudo ? 'sudo ' : '';
       await runPrivilegedShell([
@@ -162,8 +176,10 @@ async function installGithubCli() {
       ].join(' && '), { allowFailure: true });
       return;
     }
-    if (await commandExists('dnf')) return runPrivileged('dnf', ['install', '-y', 'gh'], { allowFailure: true });
+    if (await commandExists('dnf'))    return runPrivileged('dnf',    ['install', '-y', 'gh'], { allowFailure: true });
     if (await commandExists('pacman')) return runPrivileged('pacman', ['-Sy', '--noconfirm', 'github-cli'], { allowFailure: true });
+    if (await commandExists('zypper')) return runPrivileged('zypper', ['install', '-y', 'gh'], { allowFailure: true });
+    if (await commandExists('apk'))    return runCommand('apk', ['add', 'github-cli'], { allowFailure: true });
   }
   if (platform === 'darwin') {
     if (await commandExists('brew')) return runCommand('brew', ['install', 'gh'], { allowFailure: true });
@@ -177,27 +193,20 @@ async function installGithubCli() {
     if (await commandExists('choco')) {
       await runCommand('choco', ['install', 'gh', '-y'], { allowFailure: true });
       refreshWindowsToolPaths();
-      return;
     }
   }
 }
 
+// ── Public API ────────────────────────────────────────────────────────────────
 export async function ensureDependencies({ autoInstall = true, names } = {}) {
   const targets = names ? DEPENDENCIES.filter((dep) => names.includes(dep.name)) : DEPENDENCIES;
   const results = [];
   for (const dep of targets) {
     const spin = spinner(`Checking ${dep.label}`);
     let present = await dep.check();
-    if (present) {
-      spin.succeed(`${dep.label} found`);
-      results.push({ ...dep, present, installed: false });
-      continue;
-    }
+    if (present) { spin.succeed(`${dep.label} found`); results.push({ ...dep, present, installed: false }); continue; }
     spin.fail(`${dep.label} missing`);
-    if (!autoInstall) {
-      results.push({ ...dep, present: false, installed: false });
-      continue;
-    }
+    if (!autoInstall) { results.push({ ...dep, present: false, installed: false }); continue; }
     const installSpin = spinner(`Installing ${dep.label}`);
     await dep.install();
     present = await dep.check();
@@ -210,21 +219,18 @@ export async function ensureDependencies({ autoInstall = true, names } = {}) {
 
 export async function vinsCommand() {
   section('Fabrica dependency check (vins)');
+  const platform = isTermux() ? 'Termux/Android' : process.platform;
+  kv('Platform', platform);
   const results = await ensureDependencies();
   section('Summary');
   let allGood = true;
+  const summaryLines = [];
   for (const dep of results) {
-    kv(dep.label, dep.present ? 'OK' : 'MISSING — install manually');
-    if (!dep.present) {
-      allGood = false;
-      console.log(`  Manual install: ${dep.manualUrl}`);
-    }
+    summaryLines.push(`${dep.label}: ${dep.present ? '✓ OK' : '✗ MISSING — install manually'}`);
+    if (!dep.present) { allGood = false; summaryLines.push(`  Manual: ${dep.manualUrl}`); }
   }
-  if (allGood) {
-    console.log('\nAll dependencies are ready. You can run: fabrica build');
-  } else {
-    console.log('\nSome dependencies could not be installed automatically. Install them manually using the links above, then re-run "fabrica vins".');
-    process.exitCode = 1;
-  }
+  subBox(summaryLines, { isError: !allGood });
+  if (allGood) console.log('\n  All dependencies ready. Run: fabrica build');
+  else { console.log('\n  Some deps could not be installed automatically.'); process.exitCode = 1; }
   return results;
 }
