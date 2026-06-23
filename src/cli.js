@@ -78,7 +78,38 @@ async function build() {
   endSections();
 
   await ensureVercelLogin();
-  const githubRepo = await createGithubRepoFromClone(project);
+
+  let githubRepo = null;
+  try {
+    githubRepo = await createGithubRepoFromClone(project);
+  } catch (ghErr) {
+    // GitHub repo creation failed (fork/template unavailable, gh not authed, etc.)
+    // Offer to fall back to a direct code deploy — Vercel CLI uploads local files.
+    section('GitHub repo creation failed');
+    logWarn('Could not create a GitHub repository for this project.');
+    log(dim(`Reason: ${ghErr.message}`));
+    divider();
+    logInfo('Fabrica can still deploy directly from the cloned code on this machine.');
+    log(dim('Vercel will upload the local files instead of connecting to a GitHub repo.'));
+    log(dim('Auto-deploy on git push will not be available — you can connect a repo later.'));
+    endSections();
+
+    const proceed = await choose('Deploy directly from local code (no GitHub repo)?', [
+      { name: '✓  Yes — deploy from local code now',   value: 'yes' },
+      { name: '✗  No  — cancel and fix GitHub first',  value: 'no'  },
+    ]);
+
+    if (proceed === 'no') {
+      section('Deployment cancelled');
+      log(dim('Fix the GitHub issue and run "fabrica build" again.'));
+      endSections();
+      return;
+    }
+
+    // githubRepo stays null — deployToVercel skips connectGithubRepo and
+    // runs "vercel --prod --yes" which uploads local files directly.
+  }
+
   const record = await deployToVercel(project, env, githubRepo);
 
   section('✓  Deployment complete');
