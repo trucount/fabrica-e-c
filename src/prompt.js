@@ -74,7 +74,7 @@ export async function choose(message, choices) {
 
     function render(first) {
       if (!first) process.stdout.write(`\x1b[${choices.length + 1}A`);
-      console.log(`\n  ${orange('◆')} ${bold(message)}`);
+      console.log(`  ${orange('◆')} ${bold(message)}`);
       choices.forEach((choice, i) => {
         const cursor = i === selected ? orange('▶ ') : '  ';
         const label  = i === selected ? bold(orange(choice.name)) : dimOrange(choice.name);
@@ -82,6 +82,7 @@ export async function choose(message, choices) {
       });
     }
 
+    console.log('');
     render(true);
     process.stdin.setRawMode(true);
     process.stdin.resume();
@@ -99,7 +100,7 @@ export async function choose(message, choices) {
         process.stdin.pause();
         process.stdin.removeListener('data', onKey);
         process.stdout.write(`\x1b[${choices.length + 1}A`);
-        console.log(`\n  ${orange('◆')} ${bold(message)}`);
+        console.log(`  ${orange('◆')} ${bold(message)}`);
         choices.forEach((choice, i) => {
           if (i === selected) console.log(`    ${green('▶ ')}${bold(green(choice.name))}`);
           else                console.log(`    ${dimOrange('  ' + choice.name)}`);
