@@ -95,6 +95,12 @@ export function logInfo(text) { addLine(`   ${cyan(figures.info)} ${cyan(text)}`
 export function logWarn(text) { addLine(`   ${yellow(figures.warning)} ${yellow(text)}`); }
 export function logSuccess(text) { addLine(`   ${green(figures.tick)} ${green(text)}`); }
 
+// Prints immediately to the terminal instead of buffering into the current
+// section box. Use for time-sensitive messages (e.g. a URL the user needs to
+// see right now, before a long-running wait) that would otherwise stay
+// invisible until the section flushes.
+export function logLive(text) { console.log(`   ${cyan(figures.line)} ${text}`); }
+
 export function divider() { addLine(`   ${dimOrange('─'.repeat(50))}`); }
 
 // sub-step block
